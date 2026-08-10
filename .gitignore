@@ -1,0 +1,26 @@
+# --- Datos: NUNCA viajan al repositorio ---
+entrada/pautas/*
+entrada/facturas/*
+!entrada/pautas/.gitkeep
+!entrada/facturas/.gitkeep
+
+workspace/*
+!workspace/.gitkeep
+
+# El ejemplo se genera con scripts/generar_ejemplo.py
+ejemplos/pautas/*
+ejemplos/facturas/*
+!ejemplos/LEEME.md
+
+# Documentacion interna de construccion
+_CONTRATO.md
+
+.env
+.env.local
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+~$*
+.DS_Store
+Thumbs.db

@@ -1,0 +1,6 @@
+# Lo que necesita el panel. Se instala con:
+#     python -m pip install -r requisitos.txt
+flask>=3.0
+openpyxl>=3.1
+pdfplumber>=0.11
+fpdf2>=2.8      # solo para crear el ejemplo de práctica

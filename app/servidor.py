@@ -1,0 +1,335 @@
+# -*- coding: utf-8 -*-
+"""
+El servidor de Rox Panel Finanzas.
+
+Escucha SOLO en 127.0.0.1: la página no es accesible desde la red, ni desde otro
+ordenador. Los archivos que sube el usuario no salen de su equipo.
+
+Reutiliza el motor del kit tal cual (lector_pautas, lector_facturas, trm,
+conciliar). No duplica ni una regla de negocio.
+"""
+import os
+import re
+import sys
+import json
+import shutil
+import unicodedata
+import datetime
+
+RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(RAIZ, "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from flask import Flask, request, jsonify, send_from_directory, send_file
+
+import lector_pautas
+import lector_facturas
+import conciliar as motor
+import trm as modulo_trm
+from consultas import Consultas
+
+WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+ENTRADA = os.path.join(RAIZ, "entrada")
+EJEMPLOS = os.path.join(RAIZ, "ejemplos")
+WORKSPACE = os.path.join(RAIZ, "workspace")
+
+EXT_PAUTAS = (".xlsx", ".xlsm")
+EXT_FACTURAS = (".pdf",)
+LIMITE_MB = 200
+
+app = Flask(__name__, static_folder=None)
+app.config["MAX_CONTENT_LENGTH"] = LIMITE_MB * 1024 * 1024
+
+# Último cierre calculado, para que el chat pueda responder sobre él.
+ESTADO = {"filas": [], "contexto": {}, "incidencias": [], "sello": None}
+
+
+# --------------------------------------------------------------- utilidades
+def nombre_seguro(nombre):
+    """Sanea el nombre conservando tildes y eñes.
+
+    La función estándar de Flask elimina todo lo que no sea ASCII, y eso
+    destrozaría el nombre del cliente: 'Nvo - Diseño - 2026.xlsx' se quedaría en
+    'Nvo_-_Diseo_-_2026.xlsx'. Aquí solo se quitan rutas y caracteres peligrosos.
+    """
+    nombre = os.path.basename(str(nombre).replace("\\", "/"))
+    nombre = unicodedata.normalize("NFC", nombre)
+    nombre = "".join(c for c in nombre if unicodedata.category(c)[0] != "C")
+    nombre = re.sub(r'[<>:"/\\|?*]', "_", nombre).strip(" .")
+    return nombre[:180] or "archivo"
+
+
+def carpeta(tipo, ejemplo=False):
+    base = EJEMPLOS if ejemplo else ENTRADA
+    return os.path.join(base, "pautas" if tipo == "pautas" else "facturas")
+
+
+def listar(tipo, ejemplo=False):
+    d = carpeta(tipo, ejemplo)
+    if not os.path.isdir(d):
+        return []
+    ext = EXT_PAUTAS if tipo == "pautas" else EXT_FACTURAS
+    out = []
+    for n in sorted(os.listdir(d)):
+        if n.startswith("~$") or not n.lower().endswith(ext):
+            continue
+        r = os.path.join(d, n)
+        out.append({"nombre": n, "kb": max(1, os.path.getsize(r) // 1024)})
+    return out
+
+
+def marca():
+    try:
+        with open(os.path.join(RAIZ, "marca.json"), encoding="utf-8") as f:
+            d = json.load(f)
+        return (d.get("firma") or "").strip()
+    except Exception:
+        return ""
+
+
+# --------------------------------------------------------------- páginas
+@app.get("/")
+def inicio():
+    return send_from_directory(WEB, "index.html")
+
+
+@app.get("/web/<path:archivo>")
+def estaticos(archivo):
+    return send_from_directory(WEB, archivo)
+
+
+# --------------------------------------------------------------- API
+@app.get("/api/estado")
+def api_estado():
+    hoy = datetime.date.today()
+    return jsonify({
+        "marca": marca(),
+        "meses": lector_pautas.MESES,
+        "anio_sugerido": hoy.year,
+        "pautas": listar("pautas"),
+        "facturas": listar("facturas"),
+        "ejemplo_listo": bool(listar("pautas", True) and listar("facturas", True)),
+        "hay_cierre": bool(ESTADO["filas"]),
+        "sello": ESTADO["sello"],
+    })
+
+
+@app.post("/api/subir")
+def api_subir():
+    tipo = request.form.get("tipo", "pautas")
+    if tipo not in ("pautas", "facturas"):
+        return jsonify(error="Tipo de archivo desconocido"), 400
+
+    destino = carpeta(tipo)
+    if not os.path.isdir(destino):
+        os.makedirs(destino)
+
+    ext = EXT_PAUTAS if tipo == "pautas" else EXT_FACTURAS
+    guardados, rechazados = [], []
+
+    for f in request.files.getlist("archivos"):
+        if not f or not f.filename:
+            continue
+        nombre = nombre_seguro(f.filename)
+        if not nombre.lower().endswith(ext):
+            rechazados.append({
+                "nombre": nombre,
+                "motivo": "En %s solo entran %s" % (tipo, " o ".join(ext))})
+            continue
+        f.save(os.path.join(destino, nombre))
+        guardados.append(nombre)
+
+    return jsonify(guardados=guardados, rechazados=rechazados,
+                   pautas=listar("pautas"), facturas=listar("facturas"))
+
+
+@app.post("/api/vaciar")
+def api_vaciar():
+    tipo = request.json.get("tipo") if request.is_json else None
+    tipos = [tipo] if tipo in ("pautas", "facturas") else ["pautas", "facturas"]
+    borrados = 0
+    for t in tipos:
+        d = carpeta(t)
+        if not os.path.isdir(d):
+            continue
+        for n in os.listdir(d):
+            if n == ".gitkeep":
+                continue
+            try:
+                os.remove(os.path.join(d, n))
+                borrados += 1
+            except OSError:
+                pass
+    return jsonify(borrados=borrados, pautas=listar("pautas"),
+                   facturas=listar("facturas"))
+
+
+@app.post("/api/ejemplo")
+def api_ejemplo():
+    """Genera el caso de práctica inventado y lo deja listo para conciliar."""
+    try:
+        import generar_ejemplo
+        generar_ejemplo.main()
+    except ImportError:
+        return jsonify(error="Falta la librería fpdf2 para crear el ejemplo. "
+                             "Instálala con: python -m pip install fpdf2"), 500
+    except Exception as e:
+        return jsonify(error="No se pudo crear el ejemplo: %s" % e), 500
+    return jsonify(pautas=listar("pautas", True), facturas=listar("facturas", True))
+
+
+@app.post("/api/conciliar")
+def api_conciliar():
+    datos = request.get_json(silent=True) or {}
+    mes = datos.get("mes")
+    anio = datos.get("anio")
+    usar_ejemplo = bool(datos.get("ejemplo"))
+    trm_manual = datos.get("trm")
+
+    if mes not in lector_pautas.MESES:
+        return jsonify(error="Elige un mes de la lista."), 400
+    try:
+        anio = int(anio)
+    except (TypeError, ValueError):
+        return jsonify(error="El año tiene que ser un número, por ejemplo 2026."), 400
+    if not (2000 <= anio <= 2100):
+        return jsonify(error="Ese año no parece correcto."), 400
+
+    dir_p = carpeta("pautas", usar_ejemplo)
+    dir_f = carpeta("facturas", usar_ejemplo)
+
+    if not listar("pautas", usar_ejemplo):
+        return jsonify(error="No hay ningún Excel de pauta. Sube al menos uno, o "
+                             "usa el ejemplo de práctica."), 400
+    if not listar("facturas", usar_ejemplo):
+        return jsonify(error="No hay ninguna factura en PDF. Sube al menos una, o "
+                             "usa el ejemplo de práctica."), 400
+
+    filas_pauta, inc_p = lector_pautas.leer_carpeta(dir_p, mes)
+    lineas_fact, inc_f = lector_facturas.leer_carpeta(dir_f)
+    reales = [l for l in lineas_fact if not l.get("parcial")]
+
+    if not filas_pauta and not reales:
+        detalle = "; ".join("%s: %s" % (i["archivo"], i["detalle"])
+                            for i in (inc_p + inc_f)[:4])
+        return jsonify(error="No se pudo leer nada. %s" % (detalle or "")), 400
+
+    # Tipo de cambio, solo si hace falta.
+    otras = sorted({l["divisa"] for l in reales if l["divisa"] != "COP"})
+    valor_trm, origen_trm = None, "No hizo falta: todo estaba en COP"
+    aviso_trm = None
+    if otras:
+        if trm_manual:
+            try:
+                valor_trm = float(trm_manual)
+                origen_trm = "Aportada a mano: %.2f" % valor_trm
+            except (TypeError, ValueError):
+                return jsonify(error="El tipo de cambio tiene que ser un número."), 400
+        else:
+            valor_trm, origen_trm = modulo_trm.trm_de_cierre(
+                anio, lector_pautas.MESES.index(mes) + 1)
+        if valor_trm is None:
+            aviso_trm = ("Hay facturas en %s y no se pudo obtener el tipo de cambio "
+                         "(%s). Esas campañas quedan SIN DATOS. Puedes escribir el "
+                         "tipo de cambio a mano y volver a conciliar."
+                         % (", ".join(otras), origen_trm))
+
+    filas, inc_c = motor.conciliar(filas_pauta, lineas_fact, valor_trm, origen_trm)
+    incidencias = inc_p + inc_f + inc_c
+
+    contexto = {
+        "mes": mes, "anio": anio,
+        "hoy": datetime.date.today().strftime("%d/%m/%Y"),
+        "Mes conciliado": "%s %s" % (mes, anio),
+        "Origen de los datos": "ejemplo de práctica" if usar_ejemplo
+                               else "archivos subidos por el usuario",
+        "Campañas de pauta leídas": len(filas_pauta),
+        "Líneas de factura leídas": len(reales),
+        "Tolerancia": "1 % — por debajo de esa diferencia se considera que cuadra",
+        "Tipo de cambio": origen_trm if valor_trm is None
+                          else "%.2f COP/USD — %s" % (valor_trm, origen_trm),
+        "Créditos": "Los créditos por actividad no válida van en columna aparte, "
+                    "no restados del facturado",
+        "Regla de los huecos": "Lo que falta se marca SIN DATOS. No se estima nunca",
+    }
+
+    if not os.path.isdir(WORKSPACE):
+        os.makedirs(WORKSPACE)
+    sello = "%04d-%02d" % (anio, lector_pautas.MESES.index(mes) + 1)
+    ruta_x = motor.escribir_excel(
+        os.path.join(WORKSPACE, "%s-consolidado-pautas.xlsx" % sello),
+        filas, incidencias, contexto)
+    ruta_h = motor.escribir_html(
+        os.path.join(WORKSPACE, "%s-informe-conciliacion.html" % sello),
+        filas, incidencias, contexto)
+
+    ESTADO["filas"] = filas
+    ESTADO["contexto"] = contexto
+    ESTADO["incidencias"] = incidencias
+    ESTADO["sello"] = sello
+
+    cf, ce = {}, {}
+    for f in filas:
+        cf[f["estado"]] = cf.get(f["estado"], 0) + 1
+        ce[f["estado_ejec"]] = ce.get(f["estado_ejec"], 0) + 1
+
+    def suma(campo):
+        v = [f[campo] for f in filas if f.get(campo) is not None]
+        return sum(v) if v else None
+
+    comparables = cf.get("CUADRA", 0) + cf.get("DESVIACION EN FACTURACION", 0)
+    return jsonify({
+        "sello": sello,
+        "campanas": len(filas),
+        "clientes": len({f["cliente"] for f in filas if f.get("cliente")}),
+        "presupuesto": suma("plan"),
+        "consumido": suma("consumido"),
+        "facturado": suma("facturado"),
+        "facturacion": cf,
+        "ejecucion": ce,
+        "comparables": comparables,
+        "cuadran": cf.get("CUADRA", 0),
+        "incidencias": [{"archivo": i.get("archivo"), "tipo": i.get("tipo"),
+                         "detalle": i.get("detalle")} for i in incidencias],
+        "aviso_trm": aviso_trm,
+        "excel": os.path.basename(ruta_x),
+        "informe": os.path.basename(ruta_h),
+    })
+
+
+@app.get("/api/informe")
+def api_informe():
+    if not ESTADO["sello"]:
+        return "Todavía no hay ningún cierre.", 404
+    ruta = os.path.join(WORKSPACE, "%s-informe-conciliacion.html" % ESTADO["sello"])
+    if not os.path.exists(ruta):
+        return "No encuentro el informe.", 404
+    return send_file(ruta)
+
+
+@app.get("/api/descargar/<cual>")
+def api_descargar(cual):
+    if not ESTADO["sello"]:
+        return jsonify(error="Todavía no hay ningún cierre"), 404
+    nombres = {"excel": "%s-consolidado-pautas.xlsx" % ESTADO["sello"],
+               "informe": "%s-informe-conciliacion.html" % ESTADO["sello"]}
+    if cual not in nombres:
+        return jsonify(error="No sé qué archivo quieres"), 400
+    ruta = os.path.join(WORKSPACE, nombres[cual])
+    if not os.path.exists(ruta):
+        return jsonify(error="Ese archivo ya no está en workspace/"), 404
+    return send_file(ruta, as_attachment=True, download_name=nombres[cual])
+
+
+@app.post("/api/chat")
+def api_chat():
+    datos = request.get_json(silent=True) or {}
+    pregunta = (datos.get("pregunta") or "").strip()
+    respuesta = Consultas(ESTADO["filas"], ESTADO["contexto"]).responder(pregunta)
+    return jsonify(respuesta)
+
+
+@app.errorhandler(413)
+def demasiado_grande(_):
+    return jsonify(error="Los archivos pesan más de %d MB juntos. Súbelos por "
+                         "tandas." % LIMITE_MB), 413

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel de conciliación de pautas</title>
+<link rel="stylesheet" href="/web/estilo.css">
+</head>
+<body>
+
+<header class="cabecera">
+  <div class="contenedor cabecera-fila">
+    <div>
+      <h1>Conciliación de pautas</h1>
+      <p class="lema">Lo que se planeó, ¿se ejecutó y se cobró?</p>
+    </div>
+    <div class="firma" id="firma"></div>
+  </div>
+</header>
+
+<nav class="menu">
+  <div class="contenedor menu-fila">
+    <button class="pestana activa" data-panel="cerrar" type="button">1 · Cerrar el mes</button>
+    <button class="pestana" data-panel="resultado" type="button" disabled>2 · Resultado</button>
+    <button class="pestana" data-panel="informe" type="button" disabled>3 · Informe</button>
+    <button class="pestana" data-panel="chat" type="button" disabled>4 · Preguntar</button>
+  </div>
+</nav>
+
+<main class="contenedor">
+
+  <!-- ============ PANEL 1: CERRAR ============ -->
+  <section class="panel activa" id="panel-cerrar">
+
+    <div class="rejilla-subida">
+      <div class="caja-subida" id="zona-pautas" data-tipo="pautas">
+        <h2>Excel de pauta</h2>
+        <p class="ayuda">Uno por cliente. El nombre del archivo es el cliente, y
+          cada hoja es un mes.</p>
+        <label class="boton-archivo">
+          Elegir archivos
+          <input type="file" multiple accept=".xlsx,.xlsm" hidden>
+        </label>
+        <p class="soltar">o suéltalos aquí</p>
+        <ul class="lista" id="lista-pautas"></ul>
+      </div>
+
+      <div class="caja-subida" id="zona-facturas" data-tipo="facturas">
+        <h2>Facturas en PDF</h2>
+        <p class="ayuda">Google Ads, Meta, TikTok y LinkedIn. Los duplicados se
+          detectan solos.</p>
+        <label class="boton-archivo">
+          Elegir archivos
+          <input type="file" multiple accept=".pdf" hidden>
+        </label>
+        <p class="soltar">o suéltalos aquí</p>
+        <ul class="lista" id="lista-facturas"></ul>
+      </div>
+    </div>
+
+    <div class="fila-acciones">
+      <div class="campo">
+        <label for="mes">Mes a cerrar</label>
+        <select id="mes"></select>
+      </div>
+      <div class="campo campo-corto">
+        <label for="anio">Año</label>
+        <input type="number" id="anio" min="2000" max="2100" step="1">
+      </div>
+      <div class="campo campo-corto" id="campo-trm" hidden>
+        <label for="trm">Tipo de cambio</label>
+        <input type="number" id="trm" step="0.01" placeholder="3132.42">
+      </div>
+      <button class="boton principal" id="btn-conciliar" type="button">Conciliar</button>
+      <button class="boton" id="btn-vaciar" type="button">Vaciar</button>
+    </div>
+
+    <p class="pie-panel">
+      ¿Quieres probarlo sin datos reales?
+      <button class="enlace" id="btn-ejemplo" type="button">Usar el ejemplo de práctica</button>
+      — dos clientes inventados con errores metidos a propósito.
+    </p>
+
+    <div class="aviso" id="aviso-cerrar" hidden></div>
+  </section>
+
+  <!-- ============ PANEL 2: RESULTADO ============ -->
+  <section class="panel" id="panel-resultado">
+    <div id="veredicto"></div>
+
+    <div class="rejilla-datos" id="cifras"></div>
+
+    <h2>Facturación</h2>
+    <div class="rejilla-datos" id="estados-fact"></div>
+
+    <h2>Ejecución frente al plan</h2>
+    <div class="rejilla-datos" id="estados-ejec"></div>
+
+    <div id="bloque-incidencias"></div>
+
+    <div class="fila-acciones">
+      <a class="boton principal" id="dl-excel" href="/api/descargar/excel">Descargar Excel</a>
+      <a class="boton" id="dl-informe" href="/api/descargar/informe">Descargar informe</a>
+      <button class="boton" id="btn-ver-informe" type="button">Ver el informe</button>
+    </div>
+  </section>
+
+  <!-- ============ PANEL 3: INFORME ============ -->
+  <section class="panel" id="panel-informe">
+    <p class="ayuda">El informe completo. Dentro tiene su propio botón para
+      guardarlo en PDF.</p>
+    <iframe id="marco-informe" title="Informe de conciliación"></iframe>
+  </section>
+
+  <!-- ============ PANEL 4: CHAT ============ -->
+  <section class="panel" id="panel-chat">
+    <div class="chat">
+      <div class="chat-mensajes" id="chat-mensajes"></div>
+      <div class="chat-sugerencias" id="chat-sugerencias"></div>
+      <form class="chat-entrada" id="chat-form">
+        <input type="text" id="chat-texto" autocomplete="off"
+               placeholder="Pregunta sobre este cierre…">
+        <button class="boton principal" type="submit">Preguntar</button>
+      </form>
+      <p class="ayuda chat-nota">Responde leyendo el consolidado que se acaba de
+        calcular. No estima ni interpreta: si un dato no está, lo dice.</p>
+    </div>
+  </section>
+
+</main>
+
+<div class="capa-espera" id="espera" hidden>
+  <div class="caja-espera">
+    <div class="girando"></div>
+    <p id="texto-espera">Trabajando…</p>
+  </div>
+</div>
+
+<script src="/web/panel.js"></script>
+</body>
+</html>
