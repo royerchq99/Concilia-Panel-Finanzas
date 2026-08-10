@@ -29,9 +29,19 @@ import trm as modulo_trm
 from consultas import Consultas
 
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
-ENTRADA = os.path.join(RAIZ, "entrada")
-EJEMPLOS = os.path.join(RAIZ, "ejemplos")
-WORKSPACE = os.path.join(RAIZ, "workspace")
+
+# En un servidor, los datos van a un volumen que sobrevive a los despliegues.
+# En local, a las carpetas de siempre. Se controla con PANEL_DATOS.
+DATOS = os.environ.get("PANEL_DATOS", "").strip() or RAIZ
+ENTRADA = os.path.join(DATOS, "entrada")
+EJEMPLOS = os.path.join(DATOS, "ejemplos")
+WORKSPACE = os.path.join(DATOS, "workspace")
+
+for _d in (os.path.join(ENTRADA, "pautas"), os.path.join(ENTRADA, "facturas"),
+           os.path.join(EJEMPLOS, "pautas"), os.path.join(EJEMPLOS, "facturas"),
+           WORKSPACE):
+    if not os.path.isdir(_d):
+        os.makedirs(_d, exist_ok=True)
 
 EXT_PAUTAS = (".xlsx", ".xlsm")
 EXT_FACTURAS = (".pdf",)
@@ -42,6 +52,40 @@ app.config["MAX_CONTENT_LENGTH"] = LIMITE_MB * 1024 * 1024
 
 # Último cierre calculado, para que el chat pueda responder sobre él.
 ESTADO = {"filas": [], "contexto": {}, "incidencias": [], "sello": None}
+
+
+# --------------------------------------------------------------- contraseña
+# En local no hace falta: solo tú puedes entrar. Pero si el panel se comparte
+# por un túnel, la dirección es pública y sin contraseña entraría cualquiera.
+CLAVE = os.environ.get("PANEL_CLAVE", "").strip()
+
+
+@app.before_request
+def pedir_clave():
+    if not CLAVE:
+        return None
+    # La comprobación de salud del servidor no lleva contraseña: si la pidiera,
+    # el contenedor se reiniciaría solo cada pocos segundos.
+    if request.path == "/salud":
+        return None
+    auth = request.authorization
+    if auth and auth.password == CLAVE:
+        return None
+    from flask import Response
+    return Response(
+        "Este panel está protegido con contraseña.", 401,
+        {"WWW-Authenticate": 'Basic realm="Panel de conciliación de pautas"'})
+
+
+@app.get("/salud")
+def salud():
+    """Le dice al servidor que el panel sigue vivo. Sin datos dentro."""
+    return jsonify(estado="ok")
+
+
+def crear_app():
+    """Punto de entrada para el servidor de producción (waitress)."""
+    return app
 
 
 # --------------------------------------------------------------- utilidades
@@ -169,6 +213,10 @@ def api_ejemplo():
     """Genera el caso de práctica inventado y lo deja listo para conciliar."""
     try:
         import generar_ejemplo
+        # En el servidor los ejemplos viven en el volumen, no junto al código.
+        generar_ejemplo.EJ = EJEMPLOS
+        generar_ejemplo.PAUTAS = os.path.join(EJEMPLOS, "pautas")
+        generar_ejemplo.FACTURAS = os.path.join(EJEMPLOS, "facturas")
         generar_ejemplo.main()
     except ImportError:
         return jsonify(error="Falta la librería fpdf2 para crear el ejemplo. "

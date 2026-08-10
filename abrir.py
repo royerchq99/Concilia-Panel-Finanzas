@@ -59,11 +59,33 @@ def puerto_libre(preferido):
     return p
 
 
+def clave_nueva():
+    """Contraseña corta y fácil de dictar por teléfono."""
+    import secrets
+    letras = "abcdefghijkmnpqrstuvwxyz23456789"   # sin l, o, 0, 1
+    return "-".join("".join(secrets.choice(letras) for _ in range(4))
+                    for _ in range(3))
+
+
 def main():
+    compartir = "--compartir" in sys.argv
+
     print("")
     print("  Panel de conciliación de pautas")
     print("  " + "-" * 44)
     comprobar_dependencias()
+
+    if compartir:
+        clave = os.environ.get("PANEL_CLAVE") or clave_nueva()
+        os.environ["PANEL_CLAVE"] = clave
+        print("")
+        print("  MODO COMPARTIDO: el panel pedirá contraseña.")
+        print("")
+        print("      Usuario:     lo que sea (da igual)")
+        print("      Contraseña:  %s" % clave)
+        print("")
+        print("  Pásasela a quien vaya a entrar. Sin ella no se puede.")
+        print("")
 
     from servidor import app
 

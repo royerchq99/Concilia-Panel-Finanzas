@@ -1,0 +1,12 @@
+entrada/
+workspace/
+ejemplos/pautas/
+ejemplos/facturas/
+_CONTRATO.md
+.git/
+__pycache__/
+*.pyc
+.venv/
+venv/
+abrir.bat
+abrir.command
