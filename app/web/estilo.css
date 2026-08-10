@@ -148,11 +148,11 @@ td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
   flex-direction:column;gap:12px;padding-right:4px}
 .msj{max-width:88%;padding:11px 15px;border-radius:11px;font-size:14px;white-space:pre-wrap}
 .msj.yo{align-self:flex-end;background:var(--acento);color:#fff;border-bottom-right-radius:3px}
-.msj.panel{align-self:flex-start;background:var(--panel);border:1px solid var(--linea);
+.msj.respuesta{align-self:flex-start;background:var(--panel);border:1px solid var(--linea);
   border-bottom-left-radius:3px;white-space:normal}
-.msj.panel strong{font-weight:700}
-.msj.panel ul{margin:7px 0 0;padding-left:19px}
-.msj.panel li{margin:2px 0}
+.msj.respuesta strong{font-weight:700}
+.msj.respuesta ul{margin:7px 0 0;padding-left:19px}
+.msj.respuesta li{margin:2px 0}
 .msj .tabla-scroll{margin-top:11px;max-height:320px;overflow:auto}
 .chat-sugerencias{display:flex;flex-wrap:wrap;gap:7px}
 .chip{border:1px solid var(--linea);background:var(--panel);border-radius:99px;

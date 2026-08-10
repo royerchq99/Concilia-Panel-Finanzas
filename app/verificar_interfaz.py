@@ -72,6 +72,37 @@ def main():
               "el JS usa clases sin estilo: %s" % ", ".join(huerfanas))
 
     print()
+    print("3b. Ninguna clase del JS choca con una regla que la oculte")
+    # Existe por un fallo real: los mensajes del chat se creaban con
+    # class="msj panel", y '.panel' es la clase de las secciones, que lleva
+    # display:none. Las respuestas se generaban bien y quedaban invisibles.
+    ocultadoras = set()
+    # Sin quitar los comentarios, el selector llega pegado al comentario que
+    # tiene encima y nunca coincide. Este verificador ya falló una vez por esto.
+    css_limpio = re.sub(r'/\*.*?\*/', " ", css, flags=re.S)
+    for m in re.finditer(r'([^{}]+)\{([^}]*)\}', css_limpio):
+        selectores, cuerpo = m.group(1), m.group(2)
+        if not re.search(r'display\s*:\s*none', cuerpo):
+            continue
+        for sel in selectores.split(","):
+            sel = sel.strip()
+            # Solo el caso peligroso: una clase suelta, sin combinar con otra.
+            mm = re.fullmatch(r'\.([a-zA-Z][\w-]*)', sel)
+            if mm:
+                ocultadoras.add(mm.group(1))
+    # Las clases no siempre se aplican con un literal completo: en el fallo real
+    # era `d.className = "msj " + quien`, y 'quien' valía "panel". Por eso se
+    # miran TODOS los textos sueltos del JS y se avisa si alguno coincide con el
+    # nombre de una clase que el CSS oculta.
+    textos = set(re.findall(r'"([a-zA-Z][\w-]*)"', js))
+    textos |= set(re.findall(r"'([a-zA-Z][\w-]*)'", js))
+    choques = sorted((usadas | textos) & ocultadoras)
+    comprobar(not choques,
+              "ninguna de las clases del JS está oculta por otra regla",
+              "el JS usa como clase un nombre que el CSS oculta con display:none: "
+              "%s. Los elementos se crearían y no se verían." % ", ".join(choques))
+
+    print()
     print("4. Nada externo: el panel funciona sin internet")
     externos = re.findall(r'(?:src|href)="(https?://[^"]+)"', html)
     externos += re.findall(r'@import\s+url\(["\']?(https?://[^)"\']+)', css)

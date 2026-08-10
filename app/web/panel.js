@@ -359,9 +359,9 @@ function preguntar(texto) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ pregunta: texto })
   }).then(function (r) {
-    mensaje(r.texto, "panel", r.tabla);
+    mensaje(r.texto, "respuesta", r.tabla);
   }).catch(function (e) {
-    mensaje("No he podido responder: " + e.message, "panel");
+    mensaje("No he podido responder: " + e.message, "respuesta");
   });
 }
 
@@ -374,7 +374,7 @@ function reiniciarChat() {
   $("#chat-mensajes").innerHTML = "";
   mensaje("El cierre está calculado. Pregúntame lo que quieras sobre él: " +
     "respondo leyendo el consolidado, así que las cifras son las mismas que " +
-    "las del informe.", "panel");
+    "las del informe.", "respuesta");
   var s = $("#chat-sugerencias");
   s.innerHTML = "";
   SUGERENCIAS.forEach(function (t) {
