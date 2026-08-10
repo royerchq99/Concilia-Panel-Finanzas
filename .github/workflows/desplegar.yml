@@ -1,0 +1,60 @@
+# Avisa a EasyPanel para que despliegue, cada vez que cambia main.
+#
+# La direccion del webhook lleva un token: NO va en este archivo, va en los
+# secretos del repositorio (Settings -> Secrets and variables -> Actions).
+# Se llama EASYPANEL_WEBHOOK.
+
+name: Desplegar en EasyPanel
+
+on:
+  push:
+    branches: [main]
+    # Cambios que no afectan a lo que corre en el servidor: no se despliega.
+    paths-ignore:
+      - '**.md'
+      - 'abrir.bat'
+      - 'abrir.command'
+      - '.gitignore'
+      - 'LICENSE'
+  workflow_dispatch:        # para lanzarlo a mano desde la pestaña Actions
+
+concurrency:
+  group: despliegue
+  cancel-in-progress: true  # si llegan dos push seguidos, solo cuenta el ultimo
+
+jobs:
+  avisar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comprobar que el secreto existe
+        env:
+          WEBHOOK: ${{ secrets.EASYPANEL_WEBHOOK }}
+        run: |
+          if [ -z "$WEBHOOK" ]; then
+            echo "Falta el secreto EASYPANEL_WEBHOOK."
+            echo "Ponlo en Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          echo "Secreto encontrado."
+
+      - name: Pedir el despliegue
+        env:
+          WEBHOOK: ${{ secrets.EASYPANEL_WEBHOOK }}
+        run: |
+          # --fail hace que un error del servidor tumbe el paso en vez de
+          # pasar por bueno un despliegue que no ocurrio.
+          codigo=$(curl --silent --show-error --fail \
+                        --retry 3 --retry-delay 5 --max-time 45 \
+                        --output respuesta.txt --write-out "%{http_code}" \
+                        -X POST "$WEBHOOK") || {
+            echo "El webhook no respondio bien."
+            cat respuesta.txt 2>/dev/null || true
+            exit 1
+          }
+          echo "EasyPanel respondio $codigo"
+          cat respuesta.txt 2>/dev/null || true
+
+      - name: Recordatorio
+        run: |
+          echo "El despliegue lo hace EasyPanel, no este flujo."
+          echo "Mira los logs del servicio en EasyPanel para ver si termino bien."
