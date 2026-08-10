@@ -1,4 +1,4 @@
-# Empieza aquí
+# Concilia · empieza aquí
 
 **Entra** en una página que se abre en tu navegador: arrastras los Excel de pauta y
 los PDFs de factura, eliges el mes y pulsas un botón → **sale** el cierre en

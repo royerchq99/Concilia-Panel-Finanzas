@@ -1,4 +1,4 @@
-# Poner el panel en internet
+# Poner Concilia en internet
 
 Guía para dejarlo funcionando en un **VPS con EasyPanel**, con tu dominio y HTTPS.
 
@@ -22,7 +22,7 @@ porque cada uno tiene su propio volumen.
 
 | Un servicio por… | Dirección | Aislamiento |
 |---|---|---|
-| Tú | `panel.tudominio.com` | — |
+| Tú | `concilia.tudominio.com` | — |
 | Cliente A | `clientea.tudominio.com` | Volumen propio |
 | Cliente B | `clienteb.tudominio.com` | Volumen propio |
 
@@ -40,9 +40,9 @@ En Porkbun: tu dominio → **DNS** → añade un registro por cada subdominio:
 
 | Type | Host | Answer | TTL |
 |---|---|---|---|
-| `A` | `panel` | la IP de tu VPS | 600 |
+| `A` | `concilia` | la IP de tu VPS | 600 |
 
-Eso crea `panel.tudominio.com`. Repite con otro host (`clientea`, `clienteb`…) para
+Eso crea `concilia.tudominio.com`. Repite con otro host (`clientea`, `clienteb`…) para
 cada instancia.
 
 Si quieres usar el dominio a secas (`tudominio.com`), el Host va vacío o con `@`.
@@ -51,7 +51,7 @@ Si quieres usar el dominio a secas (`tudominio.com`), el Host va vacío o con `@
 tu ordenador:
 
 ```bash
-nslookup panel.tudominio.com
+nslookup concilia.tudominio.com
 ```
 
 Cuando responda con la IP de tu VPS, sigue. **No conectes el dominio en EasyPanel
@@ -62,7 +62,7 @@ antes de eso**: el certificado HTTPS fallará y tendrás que reintentarlo.
 ## Paso 2 · Crear el servicio en EasyPanel
 
 1. Entra en EasyPanel y crea un **Project** (o usa uno que tengas).
-2. Dentro, **+ Service → App**. Ponle un nombre: `panel-conciliacion`.
+2. Dentro, **+ Service → App**. Ponle un nombre: `concilia`.
 
 ### Source
 
@@ -86,14 +86,22 @@ Añade estas variables:
 
 ```
 PANEL_CLAVE=pon-aqui-una-contrasena-larga
+PANEL_USUARIO=Marbel
 PANEL_DATOS=/datos
 ```
 
-**`PANEL_CLAVE` es la contraseña de entrada.** Sin ella el panel queda abierto a
-cualquiera que sepa la dirección. Que sea larga y que no la uses en otro sitio.
+| Variable | Para qué |
+|---|---|
+| `PANEL_CLAVE` | **La contraseña de entrada.** Obligatoria: sin ella el panel **no arranca** en modo servidor. Que sea larga y que no la uses en otro sitio |
+| `PANEL_USUARIO` | El nombre de usuario. **Opcional**: si lo dejas fuera, solo se comprueba la contraseña y el usuario da igual |
+| `PANEL_DATOS` | Dónde viven los archivos. Tiene que coincidir con el volumen |
 
-Al entrar, el navegador pedirá usuario y contraseña: **el usuario da igual** (pon lo
-que sea), lo que se comprueba es la contraseña.
+Las mayúsculas del usuario **no importan**: `Marbel`, `marbel` o `MARBEL` valen
+igual. La contraseña sí distingue mayúsculas.
+
+> **El panel se niega a arrancar sin `PANEL_CLAVE`.** Si te la dejas, verás en los
+> logs `NO ARRANCO SIN CONTRASEÑA` y el contenedor no levantará. Es a propósito:
+> antes bastaba olvidar esa variable para dejar las facturas abiertas a internet.
 
 ### Volumes
 
@@ -109,7 +117,7 @@ Añade tu dominio:
 
 | Campo | Valor |
 |---|---|
-| Host | `panel.tudominio.com` |
+| Host | `concilia.tudominio.com` |
 | Port | `8760` |
 | HTTPS | **activado** |
 
@@ -130,19 +138,24 @@ En orden, y sin saltarte ninguno:
 
 ```bash
 # 1. ¿El contenedor responde? (esto NO pide contraseña, es la comprobación de salud)
-curl https://panel.tudominio.com/salud
+curl https://concilia.tudominio.com/salud
 # Tiene que devolver: {"estado":"ok"}
 
 # 2. ¿La contraseña protege de verdad?
-curl -i https://panel.tudominio.com/ | head -1
+curl -i https://concilia.tudominio.com/ | head -1
 # Tiene que devolver: HTTP/2 401
 
-# 3. ¿Entra con la contraseña?
-curl -u x:TU_CONTRASENA https://panel.tudominio.com/api/estado
+# 3. ¿Entra con usuario y contraseña?
+curl -u Marbel:TU_CONTRASENA https://concilia.tudominio.com/api/estado
 # Tiene que devolver un JSON con los meses
+
+# 4. ¿Rechaza a un usuario que no es?
+curl -o /dev/null -s -w "%{http_code}
+" -u otro:TU_CONTRASENA https://concilia.tudominio.com/
+# Tiene que devolver: 401
 ```
 
-Si los tres pasan, abre `https://panel.tudominio.com` en el navegador, mete la
+Si los tres pasan, abre `https://concilia.tudominio.com` en el navegador, mete la
 contraseña, pulsa **"Usar el ejemplo de práctica"** y luego **Conciliar**. Tienen que
 salir 6 que cuadran, 2 con desviación, 2 sin factura y 2 sin pauta.
 
@@ -152,6 +165,7 @@ Mira los logs del servicio en EasyPanel:
 
 | Lo que ves en los logs | Qué pasa |
 |---|---|
+| `NO ARRANCO SIN CONTRASEÑA` | Falta la variable `PANEL_CLAVE`. Añádela y vuelve a desplegar |
 | `ModuleNotFoundError` | La construcción no terminó bien. Vuelve a desplegar |
 | El contenedor se reinicia solo | La comprobación de salud falla. Comprueba que el puerto del dominio es `8760` |
 | `Address already in use` | Otro servicio usa ese puerto en el mismo proyecto |
@@ -163,8 +177,8 @@ Mira los logs del servicio en EasyPanel:
 
 Para cada cliente, repite el Paso 2 cambiando tres cosas:
 
-1. **Nombre del servicio**: `panel-clientea`
-2. **`PANEL_CLAVE`**: una contraseña distinta
+1. **Nombre del servicio**: `concilia-clientea`
+2. **`PANEL_CLAVE`** y **`PANEL_USUARIO`**: distintos para cada cliente
 3. **Domains**: `clientea.tudominio.com` (y su registro `A` en Porkbun)
 
 El volumen se crea nuevo y separado. Cada cliente tiene sus archivos y sus
@@ -185,7 +199,7 @@ Si activas **Auto Deploy** en el servicio, se actualiza solo con cada `push` a `
 
 Está aquí para que nadie se lleve una sorpresa:
 
-- **No hay cuentas de usuario.** Una contraseña compartida por instancia.
+- **No hay cuentas de usuario de verdad.** Un usuario y una contraseña compartidos por instancia, no una cuenta por persona.
 - **No hay histórico.** Cada cierre pisa al anterior del mismo mes.
 - **No hay copias de seguridad automáticas.** El volumen vive en tu VPS: si quieres
   respaldo, configúralo en Hostinger.

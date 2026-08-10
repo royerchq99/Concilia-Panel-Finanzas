@@ -1,5 +1,6 @@
 {
-  "_comentario": "Pon aquí tu nombre o el de tu agencia y aparecerá en el informe. Déjalo vacío y el informe sale sin firma (marca blanca).",
+  "_comentario": "El nombre del producto y tu firma. Aparecen en el panel y en el informe. Deja 'firma' vacía para marca blanca.",
+  "producto": "Concilia",
   "firma": "Rox Solutions",
   "pie": ""
 }

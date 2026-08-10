@@ -36,18 +36,24 @@ TOLERANCIA = 0.01          # 1 %. Se puede cambiar aquí.
 MESES = lector_pautas.MESES
 
 
+PRODUCTO_POR_DEFECTO = "Conciliación de pautas"
+
+
 def leer_marca():
-    """Firma del informe. Vacía = marca blanca. Se configura en marca.json."""
+    """Nombre del producto y firma del informe. Se configuran en marca.json."""
     ruta = os.path.join(RAIZ, "marca.json")
-    if not os.path.exists(ruta):
-        return "", ""
-    try:
-        import json
-        with open(ruta, encoding="utf-8") as f:
-            d = json.load(f)
-        return (d.get("firma") or "").strip(), (d.get("pie") or "").strip()
-    except Exception:
-        return "", ""
+    producto, firma, pie = PRODUCTO_POR_DEFECTO, "", ""
+    if os.path.exists(ruta):
+        try:
+            import json
+            with open(ruta, encoding="utf-8") as f:
+                d = json.load(f)
+            producto = (d.get("producto") or "").strip() or PRODUCTO_POR_DEFECTO
+            firma = (d.get("firma") or "").strip()
+            pie = (d.get("pie") or "").strip()
+        except Exception:
+            pass
+    return producto, firma, pie
 
 # Dos preguntas distintas, dos estados distintos. Mezclarlos oculta lo importante:
 # que una campaña gaste menos de lo planeado es normal y no dice nada de si la
@@ -345,7 +351,7 @@ def porcentaje(v):
 
 
 def escribir_html(ruta, filas, incidencias, contexto):
-    firma, pie = leer_marca()
+    producto, firma, pie = leer_marca()
     total_plan = sum(f["plan"] or 0 for f in filas)
     total_cons = sum(f["consumido"] or 0 for f in filas)
     total_fact = sum(f["facturado"] or 0 for f in filas)
@@ -431,7 +437,7 @@ def escribir_html(ruta, filas, incidencias, contexto):
     h = []
     a = h.append
     a("""<meta charset="utf-8">
-<title>Conciliación de pautas · %(mes)s %(anio)s</title>
+<title>%(producto)s · Conciliación de pautas · %(mes)s %(anio)s</title>
 <style>
 :root{--tinta:#1c2430;--suave:#5b6875;--linea:#dde3ea;--fondo:#fff;--panel:#f6f8fa;
 --buena:#1e7a45;--aceptable:#8a6d1a;--floja:#a8541b;--critica:#a32020;}
@@ -503,10 +509,12 @@ Descargar en PDF</button>
 </div>
 <p class="pista noimprimir">Se abre la ventana de impresión: elige
 <strong>Guardar como PDF</strong> en el destino.</p>
-<h1>Conciliación de pautas · %(mes)s %(anio)s</h1>
-<p class="sub">Planeado, ejecutado y facturado, campaña a campaña ·
+<h1>%(producto)s</h1>
+<p class="sub">Conciliación de pautas · %(mes)s %(anio)s ·
 Generado el %(hoy)s%(firma_sub)s</p>
-""" % dict(contexto, firma_sub=(" por " + firma) if firma else ""))
+"""
+      % dict(contexto, producto=producto,
+               firma_sub=(" por " + firma) if firma else ""))
 
     a("""<div class="veredicto %s">
 <div class="cifra">%.0f %%</div>
@@ -651,11 +659,12 @@ porcentaje: se listan aparte.</div>
         a("<tr><td><strong>%s</strong></td><td>%s</td></tr>" % (k, v))
     a("</table>")
 
-    a("<footer>%sConciliación de pautas · %s %s<br>"
+    a("<footer>%s%s · Conciliación de pautas · %s %s<br>"
       "Los importes salen de los archivos de pauta y de las facturas. "
       "Lo único calculado son las diferencias y los porcentajes. "
       "Lo que falta se marca SIN DATOS.%s</footer></div>"
-      % ((firma + " · ") if firma else "", contexto["mes"], contexto["anio"],
+      % ((firma + " · ") if firma else "", producto,
+         contexto["mes"], contexto["anio"],
          ("<br>" + pie) if pie else ""))
 
     with open(ruta, "w", encoding="utf-8") as f:

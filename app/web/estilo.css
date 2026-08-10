@@ -1,9 +1,10 @@
-/* Panel de conciliación de pautas · estilo propio, sin librerías externas */
+/* Concilia · estilo propio, sin librerías externas */
 
 :root{
-  --tinta:#1c2430; --suave:#5b6875; --linea:#dde3ea;
-  --fondo:#f2f5f8; --papel:#fff; --panel:#f6f8fa;
-  --acento:#2c4a6e; --acento-claro:#e8eff7;
+  --tinta:#151d28; --suave:#5b6875; --linea:#dfe5ec;
+  --fondo:#f1f4f8; --papel:#fff; --panel:#f6f8fb;
+  --acento:#1f3a5f; --acento-vivo:#2b5286; --acento-claro:#e9f0f8;
+  --verde:#2f9e63;
   --buena:#1e7a45; --aceptable:#8a6d1a; --floja:#a8541b; --critica:#a32020;
 }
 *{box-sizing:border-box}
@@ -20,11 +21,22 @@ body{
 .contenedor{max-width:1080px;margin:0 auto;padding:0 22px}
 
 /* ---------- cabecera ---------- */
-.cabecera{background:var(--acento);color:#fff;padding:22px 0 20px}
-.cabecera-fila{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
-.cabecera h1{margin:0;font-size:24px;letter-spacing:-.2px}
-.lema{margin:3px 0 0;opacity:.82;font-size:14px}
-.firma{font-size:13px;opacity:.9;font-weight:600}
+.cabecera{
+  background:linear-gradient(180deg,var(--acento-vivo) 0%,var(--acento) 100%);
+  color:#fff;padding:20px 0 18px;
+}
+.cabecera-fila{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.marca-bloque{display:flex;align-items:center;gap:14px}
+.logo{width:44px;height:44px;flex:0 0 44px;display:block}
+.cabecera h1{
+  margin:0;font-size:27px;font-weight:700;letter-spacing:-.4px;line-height:1.1;
+}
+.lema{margin:2px 0 0;opacity:.78;font-size:13.5px}
+.firma{font-size:13px;opacity:.85;font-weight:600;letter-spacing:.2px}
+@media (max-width:560px){
+  .cabecera h1{font-size:23px}
+  .lema{font-size:12.5px}
+}
 
 /* ---------- menú ---------- */
 .menu{background:var(--papel);border-bottom:1px solid var(--linea);position:sticky;top:0;z-index:20}

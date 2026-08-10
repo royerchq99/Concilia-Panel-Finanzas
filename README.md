@@ -1,4 +1,6 @@
-# Rox Panel Finanzas
+# Concilia
+
+**Pauta, ejecución y factura en la misma tabla.**
 
 Panel para cerrar el mes de inversión publicitaria de varios clientes a la vez,
 cruzando lo que se planeó, lo que se ejecutó y lo que facturaron los medios.
@@ -118,7 +120,7 @@ archivos — está comprobado con el ejemplo de práctica, que lleva 16 errores
 plantados y da el mismo recuento en los dos.
 
 ```
-Rox-Panel-Finanzas/
+Concilia/
 ├── abrir.py / abrir.bat / abrir.command   El lanzador
 ├── app/
 │   ├── servidor.py       Las rutas de la web
@@ -163,10 +165,15 @@ actividad no válida— están en el README del kit, en
 Edita `marca.json`:
 
 ```json
-{ "firma": "Tu Agencia", "pie": "" }
+{
+  "producto": "Concilia",
+  "firma": "Tu Agencia",
+  "pie": ""
+}
 ```
 
-Aparece en la cabecera del panel y en el informe. Déjalo vacío para marca blanca.
+`producto` es el nombre que sale en la cabecera del panel y como título del
+informe. `firma` es quién lo genera. Deja `firma` vacía para marca blanca.
 
 ---
 

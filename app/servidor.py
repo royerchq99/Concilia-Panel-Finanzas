@@ -55,9 +55,18 @@ ESTADO = {"filas": [], "contexto": {}, "incidencias": [], "sello": None}
 
 
 # --------------------------------------------------------------- contraseña
-# En local no hace falta: solo tú puedes entrar. Pero si el panel se comparte
-# por un túnel, la dirección es pública y sin contraseña entraría cualquiera.
+# En local no hace falta: solo tú puedes entrar. Pero si el panel se publica en
+# internet, la dirección es pública y sin contraseña entraría cualquiera.
 CLAVE = os.environ.get("PANEL_CLAVE", "").strip()
+
+# Opcional. Si se deja vacío, el usuario da igual y solo cuenta la contraseña.
+USUARIO = os.environ.get("PANEL_USUARIO", "").strip()
+
+
+def _igual(a, b):
+    """Compara sin delatar cuántas letras se acertaron por el tiempo que tarda."""
+    import hmac
+    return hmac.compare_digest(str(a or ""), str(b or ""))
 
 
 @app.before_request
@@ -68,13 +77,20 @@ def pedir_clave():
     # el contenedor se reiniciaría solo cada pocos segundos.
     if request.path == "/salud":
         return None
+
     auth = request.authorization
-    if auth and auth.password == CLAVE:
-        return None
+    if auth and _igual(auth.password, CLAVE):
+        # El usuario solo se comprueba si se ha configurado uno, y sin distinguir
+        # mayúsculas: escribir 'marbel' o 'Marbel' tiene que valer igual. El
+        # secreto es la contraseña, no el nombre.
+        if not USUARIO or _igual(str(auth.username or "").strip().lower(),
+                                 USUARIO.lower()):
+            return None
+
     from flask import Response
     return Response(
         "Este panel está protegido con contraseña.", 401,
-        {"WWW-Authenticate": 'Basic realm="Panel de conciliación de pautas"'})
+        {"WWW-Authenticate": 'Basic realm="Concilia"'})
 
 
 @app.get("/salud")
@@ -84,7 +100,23 @@ def salud():
 
 
 def crear_app():
-    """Punto de entrada para el servidor de producción (waitress)."""
+    """Punto de entrada para el servidor de producción (waitress).
+
+    Se niega a arrancar sin contraseña. En local no hace falta —solo tú puedes
+    entrar—, pero esta función solo la llama el servidor de producción, que
+    escucha hacia fuera. Sin esta comprobación basta con olvidar una variable
+    de entorno para dejar las facturas de un cliente abiertas a internet.
+    """
+    if not CLAVE:
+        raise RuntimeError(
+            "\n\n"
+            "  NO ARRANCO SIN CONTRASEÑA.\n\n"
+            "  Este modo escucha hacia fuera, así que sin contraseña cualquiera\n"
+            "  que sepa la dirección vería las facturas.\n\n"
+            "  Añade la variable de entorno PANEL_CLAVE con una contraseña larga\n"
+            "  y vuelve a desplegar.\n\n"
+            "  (Para usar el panel en tu ordenador no necesitas nada de esto:\n"
+            "   abre abrir.bat o abrir.command.)\n")
     return app
 
 

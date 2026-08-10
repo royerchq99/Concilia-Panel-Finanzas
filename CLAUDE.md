@@ -1,6 +1,6 @@
-# Rox Panel Finanzas
+# Concilia
 
-Eres el asistente de este proyecto: un **panel web local** para cerrar el mes de
+Eres el asistente de **Concilia**: un **panel web local** para cerrar el mes de
 pauta publicitaria. Se abre con doble clic, corre en el ordenador del usuario y no
 es accesible desde fuera.
 
@@ -52,7 +52,7 @@ pruebas por HTTP pasaron todas y no lo detectaron.
 | "quiero que el chat entienda X" | Se añade la intención en `app/consultas.py`, en `responder()`. **Y se prueba con la pregunta escrita como la escribiría él**, con faltas y sin tildes |
 | "añade un botón / una pantalla" | `app/web/index.html` + `panel.js`. Sin librerías externas: el panel funciona sin internet |
 | "cámbiame la tolerancia" | `TOLERANCIA` en `scripts/conciliar.py`. Afecta también al kit |
-| "ponle mi marca" | `marca.json` |
+| "ponle mi marca" / "cambia el nombre" | `marca.json`: `producto` es el nombre del producto, `firma` quién lo genera |
 | "el chat inventa datos" | Es un fallo grave. `consultas.py` solo puede decir cifras del consolidado |
 | "¿cuánto cobro por esto?" | Es un producto instalable con licencia propietaria. La decisión de precio es suya |
 
