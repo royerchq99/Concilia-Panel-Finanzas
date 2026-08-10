@@ -22,7 +22,7 @@ porque cada uno tiene su propio volumen.
 
 | Un servicio por… | Dirección | Aislamiento |
 |---|---|---|
-| Tú | `concilia.tudominio.com` | — |
+| Tú | `concilia.app.tudominio.com` | — |
 | Cliente A | `clientea.tudominio.com` | Volumen propio |
 | Cliente B | `clienteb.tudominio.com` | Volumen propio |
 
@@ -40,9 +40,10 @@ En Porkbun: tu dominio → **DNS** → añade un registro por cada subdominio:
 
 | Type | Host | Answer | TTL |
 |---|---|---|---|
-| `A` | `concilia` | la IP de tu VPS | 600 |
+| `A` | `concilia.app` | la IP de tu VPS | 600 |
 
-Eso crea `concilia.tudominio.com`. Repite con otro host (`clientea`, `clienteb`…) para
+Eso crea `concilia.app.tudominio.com`. Repite con otro host (`clientea.app`,
+`clienteb.app`…) para
 cada instancia.
 
 Si quieres usar el dominio a secas (`tudominio.com`), el Host va vacío o con `@`.
@@ -51,7 +52,7 @@ Si quieres usar el dominio a secas (`tudominio.com`), el Host va vacío o con `@
 tu ordenador:
 
 ```bash
-nslookup concilia.tudominio.com
+nslookup concilia.app.tudominio.com
 ```
 
 Cuando responda con la IP de tu VPS, sigue. **No conectes el dominio en EasyPanel
@@ -69,7 +70,7 @@ antes de eso**: el certificado HTTPS fallará y tendrás que reintentarlo.
 | Campo | Valor |
 |---|---|
 | Tipo | **GitHub** |
-| Owner / Repo | `royerchq99/Rox-Panel-Finanzas` |
+| Owner / Repo | `royerchq99/Concilia-Panel-Finanzas` |
 | Branch | `main` |
 | Build path | `/` |
 
@@ -117,7 +118,7 @@ Añade tu dominio:
 
 | Campo | Valor |
 |---|---|
-| Host | `concilia.tudominio.com` |
+| Host | `concilia.app.tudominio.com` |
 | Port | `8760` |
 | HTTPS | **activado** |
 
@@ -138,24 +139,24 @@ En orden, y sin saltarte ninguno:
 
 ```bash
 # 1. ¿El contenedor responde? (esto NO pide contraseña, es la comprobación de salud)
-curl https://concilia.tudominio.com/salud
+curl https://concilia.app.tudominio.com/salud
 # Tiene que devolver: {"estado":"ok"}
 
 # 2. ¿La contraseña protege de verdad?
-curl -i https://concilia.tudominio.com/ | head -1
+curl -i https://concilia.app.tudominio.com/ | head -1
 # Tiene que devolver: HTTP/2 401
 
 # 3. ¿Entra con usuario y contraseña?
-curl -u Marbel:TU_CONTRASENA https://concilia.tudominio.com/api/estado
+curl -u Marbel:TU_CONTRASENA https://concilia.app.tudominio.com/api/estado
 # Tiene que devolver un JSON con los meses
 
 # 4. ¿Rechaza a un usuario que no es?
 curl -o /dev/null -s -w "%{http_code}
-" -u otro:TU_CONTRASENA https://concilia.tudominio.com/
+" -u otro:TU_CONTRASENA https://concilia.app.tudominio.com/
 # Tiene que devolver: 401
 ```
 
-Si los tres pasan, abre `https://concilia.tudominio.com` en el navegador, mete la
+Si los tres pasan, abre `https://concilia.app.tudominio.com` en el navegador, mete la
 contraseña, pulsa **"Usar el ejemplo de práctica"** y luego **Conciliar**. Tienen que
 salir 6 que cuadran, 2 con desviación, 2 sin factura y 2 sin pauta.
 
