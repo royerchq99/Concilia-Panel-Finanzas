@@ -143,6 +143,7 @@ function subir(tipo, ficheros) {
   var zona = $("#zona-" + tipo);
   var input = zona.querySelector("input[type=file]");
   input.addEventListener("change", function () {
+    marcarModoEjemplo(false);
     subir(tipo, input.files);
     input.value = "";
   });
@@ -157,6 +158,7 @@ function subir(tipo, ficheros) {
     });
   });
   zona.addEventListener("drop", function (e) {
+    marcarModoEjemplo(false);
     subir(tipo, e.dataTransfer.files);
   });
 });
@@ -168,6 +170,7 @@ $("#btn-vaciar").addEventListener("click", function () {
     body: JSON.stringify({})
   }).then(function (r) {
     usandoEjemplo = false;
+    marcarModoEjemplo(false);
     pintarLista("#lista-pautas", r.pautas, "ningún Excel de pauta");
     pintarLista("#lista-facturas", r.facturas, "ninguna factura");
     avisar("Listo, he borrado " + r.borrados + " archivo(s).", "ok");
@@ -177,10 +180,15 @@ $("#btn-vaciar").addEventListener("click", function () {
 $("#btn-ejemplo").addEventListener("click", function () {
   esperar("Creando el ejemplo de práctica…");
   pedir("/api/ejemplo", { method: "POST" })
-    .then(function () {
+    .then(function (r) {
       usandoEjemplo = true;
       $("#mes").value = "Julio";
       $("#anio").value = 2026;
+      // Se pintan los archivos DEL EJEMPLO: si no, las listas siguen mostrando
+      // entrada/ (vacía) y parece que no ha pasado nada.
+      pintarLista("#lista-pautas", r.pautas, "ningún Excel de pauta");
+      pintarLista("#lista-facturas", r.facturas, "ninguna factura");
+      marcarModoEjemplo(true);
       avisar("Ejemplo listo: dos clientes inventados con **16 errores metidos a " +
         "propósito**. Está puesto en Julio de 2026. Pulsa **Conciliar** y mira si " +
         "los encuentra todos.", "info");
@@ -188,6 +196,31 @@ $("#btn-ejemplo").addEventListener("click", function () {
     .catch(function (e) { avisar(e.message); })
     .then(finEspera);
 });
+
+/* Deja claro en pantalla que lo que se va a conciliar es el ejemplo, no tus datos. */
+function marcarModoEjemplo(activo) {
+  $$(".caja-subida").forEach(function (z) {
+    z.classList.toggle("modo-ejemplo", activo);
+  });
+  var etiqueta = $("#etiqueta-ejemplo");
+  if (activo && !etiqueta) {
+    etiqueta = document.createElement("div");
+    etiqueta.id = "etiqueta-ejemplo";
+    etiqueta.className = "etiqueta-ejemplo";
+    etiqueta.innerHTML = "Estás usando el <strong>ejemplo de práctica</strong> " +
+      "(datos inventados). <button class='enlace' id='btn-salir-ejemplo' " +
+      "type='button'>Volver a mis archivos</button>";
+    $(".rejilla-subida").insertAdjacentElement("beforebegin", etiqueta);
+    $("#btn-salir-ejemplo").addEventListener("click", function () {
+      usandoEjemplo = false;
+      marcarModoEjemplo(false);
+      limpiarAviso();
+      refrescarEstado();
+    });
+  } else if (!activo && etiqueta) {
+    etiqueta.remove();
+  }
+}
 
 /* ------------------------------------------------------------ conciliar */
 function bandaDe(pct, comparables) {

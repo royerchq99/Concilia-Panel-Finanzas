@@ -21,6 +21,18 @@ python -m pip install -r requisitos.txt
 Para probarlo sin navegador, se levanta la app de Flask en un hilo y se llaman los
 endpoints por HTTP. Así se probó al construirlo: 25 comprobaciones, 0 fallos.
 
+**Pero esa prueba no cubre lo que pinta el navegador.** Antes de dar por bueno
+cualquier cambio en `app/web/`, hay que pasar también:
+
+```bash
+python app/verificar_interfaz.py
+```
+
+Existe por un fallo real: el atributo `hidden` de HTML lo pisa cualquier regla CSS
+que defina `display`. La capa de espera tenía `display:flex`, así que se veía nada
+más cargar la página con su texto "Trabajando…", y el panel parecía colgado. Las
+pruebas por HTTP pasaron todas y no lo detectaron.
+
 ## Las piezas
 
 | Archivo | Qué hace |
