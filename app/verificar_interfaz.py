@@ -15,6 +15,10 @@ import os
 import re
 import sys
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="replace")
+    sys.stderr.reconfigure(errors="replace")
+
 AQUI = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(AQUI, "web")
 
