@@ -23,19 +23,20 @@ Que las cabeceras estén en filas distintas es a propósito: los archivos reales
 también varían, y el kit tiene que localizarlas buscando la celda `Campaña1`, no por
 posición.
 
-**`facturas/`** — seis PDFs que imitan los formatos reales de cada plataforma.
+**`facturas/`** — ocho PDFs que imitan los formatos reales de cada plataforma.
 
-## Los 16 errores plantados
+## Los 17 errores plantados
 
 El ejemplo está preparado para comprobar que el kit los encuentra. Si al ejecutarlo
 no salen estos números, algo se ha roto.
 
-### Diferencias de facturación (2)
+### Diferencias de facturación (3)
 
 | Campaña | Consumido | Facturado | Qué pasa |
 |---|---:|---:|---|
 | `nor-grado_2026-pre-gdn-cpc` | 940.000 | 1.010.000 | Le cobran **7,4 % de más** |
 | `nor-posgrado_2026-pos-tiktok-cpm` | 681.500 | 655.000 | Le cobran **3,9 % de menos** |
+| `vel-becas_2026-pre-tiktok-cpc` | 620.000 | 1.240.000 | **Posible factura duplicada** (ver abajo) — el aviso tiene que marcarla |
 
 ### Campañas sin pareja (4)
 
@@ -80,6 +81,14 @@ ellas**.
    kit tiene que decirlo en incidencias, **no** forzarla con un lector que no es.
 6. **Una factura en dólares** (LinkedIn, USD 465). Hay que convertirla con la TRM
    oficial y dejar dicho en el informe qué cambio se aplicó.
+7. **Dos PDFs DISTINTOS** (`MUUS20260099887…pdf` y `MUUS20260099888…pdf`, distinto
+   número de factura y distintos bytes) que facturan la misma campaña
+   (`vel-becas_2026-pre-tiktok-cpc`) por el **mismo importe exacto**: 620.000. No es
+   el mismo caso que el punto 4 (ahí es una copia byte a byte del mismo archivo).
+   Aquí son archivos genuinamente distintos que coinciden en campaña + importe —
+   el kit no los descarta solo, los suma (por eso sale como diferencia de
+   facturación) y además los marca en la sección "Posibles facturas duplicadas"
+   del informe para que alguien lo revise.
 
 Y además, dentro de los Excel hay filas de **SUBTOTAL, IVA MEDIO y GRAN TOTAL**
 mezcladas con los datos, como en los archivos reales. Si no se descartan, los
@@ -91,8 +100,8 @@ Con estos datos, el cierre de **Julio 2026** tiene que dar exactamente:
 
 ```
 12 campañas. Facturación:
-   CUADRA                         6
-   DESVIACION EN FACTURACION      2
+   CUADRA                         5
+   DESVIACION EN FACTURACION      3
    SIN FACTURA                    2
    SIN PAUTA                      2
 Ejecución frente al plan:
@@ -103,6 +112,9 @@ Ejecución frente al plan:
 
 3 incidencias
 ```
+
+Y en el informe, la sección **"Posibles facturas duplicadas"** tiene que listar
+exactamente una campaña: `vel-becas_2026-pre-tiktok-cpc`.
 
 Y `verificar.py` tiene que pasar todas sus comprobaciones.
 

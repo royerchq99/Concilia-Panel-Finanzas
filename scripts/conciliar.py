@@ -134,7 +134,8 @@ def conciliar(filas_pauta, lineas_factura, valor_trm, origen_trm):
                 nota = "%s %.2f x TRM %.2f" % (divisa, importe, valor_trm)
         facturado[k] = facturado.get(k, 0.0) + (convertido or 0.0)
         d = detalle.setdefault(k, {"plataformas": set(), "archivos": set(),
-                                   "divisas": set(), "notas": set(), "recibos": 0})
+                                   "divisas": set(), "notas": set(), "recibos": 0,
+                                   "lineas": []})
         d["plataformas"].add(l["plataforma"])
         d["archivos"].add(l["archivo"])
         d["divisas"].add(divisa)
@@ -143,6 +144,26 @@ def conciliar(filas_pauta, lineas_factura, valor_trm, origen_trm):
             d["notas"].add(nota)
         if convertido is None:
             facturado[k] = None
+        if importe is not None:
+            d["lineas"].append((l["archivo"], divisa, round(importe, 2)))
+
+    # Dos recibos de archivos distintos con el mismo importe exacto para la misma
+    # campaña: no es el mismo caso que el "duplicado exacto" de lector_facturas.py
+    # (esa es una copia byte a byte del mismo PDF). Aquí son archivos DISTINTOS que
+    # casualmente casan en el importe — puede ser un cobro repetido, o dos cargos
+    # legítimos que coinciden. No se descarta nada, solo se avisa para que alguien
+    # lo mire.
+    duplicados_posibles = {}
+    for k, d in detalle.items():
+        por_importe = {}
+        for archivo, divisa, importe in d["lineas"]:
+            por_importe.setdefault((divisa, importe), set()).add(archivo)
+        archivos_en_duda = set()
+        for (divisa, importe), archivos in por_importe.items():
+            if len(archivos) > 1:
+                archivos_en_duda |= archivos
+        if archivos_en_duda:
+            duplicados_posibles[k] = sorted(archivos_en_duda)
 
     resultado, incidencias = [], []
     llaves_pauta = set()
@@ -177,6 +198,8 @@ def conciliar(filas_pauta, lineas_factura, valor_trm, origen_trm):
             "motivo": motivo,
             "estado_ejec": est_e,
             "motivo_ejec": motivo_e,
+            "posible_duplicado": k in duplicados_posibles,
+            "archivos_duplicados": duplicados_posibles.get(k, []),
         })
 
     # Facturado que no casa con ninguna pauta.
@@ -204,6 +227,8 @@ def conciliar(filas_pauta, lineas_factura, valor_trm, origen_trm):
             "motivo": "Se facturó pero no está en ninguna hoja de pauta del mes",
             "estado_ejec": "SIN DATOS",
             "motivo_ejec": "No hay pauta para esta campaña",
+            "posible_duplicado": k in duplicados_posibles,
+            "archivos_duplicados": duplicados_posibles.get(k, []),
         })
 
     # Una sola incidencia con el recuento, no una por campaña: con 81 líneas
@@ -350,7 +375,7 @@ def porcentaje(v):
     return "%+.1f %%" % (v * 100)
 
 
-def escribir_html(ruta, filas, incidencias, contexto):
+def escribir_html(ruta, filas, incidencias, contexto, anterior=None):
     producto, firma, pie = leer_marca()
     total_plan = sum(f["plan"] or 0 for f in filas)
     total_cons = sum(f["consumido"] or 0 for f in filas)
@@ -362,6 +387,17 @@ def escribir_html(ruta, filas, incidencias, contexto):
     cuenta_ejec = {}
     for f in filas:
         cuenta_ejec[f["estado_ejec"]] = cuenta_ejec.get(f["estado_ejec"], 0) + 1
+
+    # Cobertura de pauta: de todas las campañas vistas (con pauta o solo
+    # facturadas), cuántas tienen su Excel de pauta cargado. No es una promesa
+    # sobre "cuántos clientes deberían estar" —eso no está en ningún archivo—,
+    # solo cuenta lo que sí se pudo ver.
+    con_pauta = sum(1 for f in filas if f["cliente"] is not None)
+    sin_pauta = cuenta.get("SIN PAUTA", 0)
+    total_vistas = con_pauta + sin_pauta
+    cobertura_pct = (con_pauta / total_vistas * 100) if total_vistas else 0
+
+    duplicados = [f for f in filas if f.get("posible_duplicado")]
 
     n = len(filas)
     # El veredicto es sobre la facturación, y solo sobre lo que se PUEDE juzgar:
@@ -412,24 +448,35 @@ def escribir_html(ruta, filas, incidencias, contexto):
                                                    "POR ENCIMA DEL PLAN")],
                           key=dif_ejec, reverse=True)[:12]
 
-    # Reparto por plataforma.
-    plataformas = {}
+    # Reparto por plataforma, con cuántas campañas tiene cada una.
+    plataformas, plataformas_n = {}, {}
     for f in filas:
         p = f["plataforma_factura"] or f["plataforma_pauta"] or "(sin plataforma)"
         plataformas[p] = plataformas.get(p, 0.0) + (f["consumido"] or 0.0)
+        plataformas_n[p] = plataformas_n.get(p, 0) + 1
     tope = max(plataformas.values()) if plataformas else 1
 
     por_cliente = {}
     for f in filas:
         cl = f["cliente"] or "(sin pauta)"
         d = por_cliente.setdefault(cl, {"n": 0, "plan": 0.0, "cons": 0.0,
-                                        "fact": 0.0, "ok": 0})
+                                        "fact": 0.0, "ok": 0, "riesgo": 0.0})
         d["n"] += 1
         d["plan"] += f["plan"] or 0.0
         d["cons"] += f["consumido"] or 0.0
         d["fact"] += f["facturado"] or 0.0
         if f["estado"] == "CUADRA":
             d["ok"] += 1
+        elif f["estado"] == "DESVIACION EN FACTURACION":
+            d["riesgo"] += dif_fact(f)
+        elif f["estado"] == "SIN FACTURA":
+            d["riesgo"] += f["consumido"] or 0.0
+
+    if anterior:
+        for cl, d in por_cliente.items():
+            fact_ant = anterior.get(cl)
+            d["fact_ant"] = fact_ant
+            d["cambio"] = desviacion(d["fact"], fact_ant) if fact_ant else None
 
     sin_medir = [f for f in filas
                  if f["estado"] in ("SIN FACTURA", "SIN PAUTA", "SIN DATOS")]
@@ -534,6 +581,21 @@ porcentaje: se listan aparte.</div>
         a('<div class="dato"><div class="k">%s</div><div class="v">%s</div></div>' % (k, v))
     a("</div>")
 
+    # Cobertura de pauta: cuántas de las campañas vistas este mes (con pauta o
+    # solo facturadas) tienen su Excel de pauta cargado. No dice si faltan
+    # clientes enteros —eso no está en ningún archivo—, solo lo que sí se ve.
+    if total_vistas:
+        a('<div class="dato" style="flex-basis:100%%;margin:4px 0 18px">'
+          '<div class="k">Cobertura de pauta</div>'
+          '<div class="v">%d de %d campañas (%.0f %%)</div>'
+          '<div class="barra"><span style="width:%.1f%%"></span></div>'
+          % (con_pauta, total_vistas, cobertura_pct, cobertura_pct))
+        if sin_pauta:
+            a('<div class="pie" style="text-align:left;margin-top:6px">%d campañas '
+              'se facturaron sin tener pauta cargada — súbela y vuelve a conciliar '
+              'para que se puedan comparar.</div>' % sin_pauta)
+        a("</div>")
+
     # Resumen ejecutivo
     total_dif_ejec = total_cons - total_plan
     total_dif_fact = total_fact - total_cons
@@ -575,6 +637,24 @@ porcentaje: se listan aparte.</div>
                   dinero(dif_fact(f)), porcentaje(f["desv_facturacion"])))
         a("</table></div>")
 
+    # Posibles duplicados: dos recibos de archivos distintos con el mismo
+    # importe exacto para la misma campaña. No se descarta nada —puede ser una
+    # coincidencia real—, solo se avisa para que alguien lo mire antes de pagar.
+    if duplicados:
+        a("<h2>Posibles facturas duplicadas</h2>")
+        a("<p>Estas campañas tienen dos o más recibos, de archivos distintos, "
+          "por el <strong>mismo importe exacto</strong>. Puede ser un cobro "
+          "repetido o dos cargos legítimos que coinciden — revísalo antes de "
+          "aprobar el pago, no se ha descartado nada solo.</p>")
+        a('<div class="tabla-scroll"><table><tr><th>Campaña</th><th>Cliente</th>'
+          '<th class="num">Facturado</th><th>Archivos en duda</th></tr>')
+        for f in duplicados:
+            a('<tr><td class="campana">%s</td><td>%s</td>'
+              '<td class="num">%s</td><td>%s</td></tr>' % (
+                  f["campana"], f["cliente"] or "—", dinero(f["facturado"]),
+                  ", ".join(f["archivos_duplicados"])))
+        a("</table></div>")
+
     # Ejecución frente al plan: informativo
     a("<h2>Ejecución frente al plan</h2>")
     a("<p>Cuánto se gastó de lo que se había presupuestado. Gastar menos "
@@ -598,20 +678,31 @@ porcentaje: se listan aparte.</div>
                   porcentaje(f["desv_ejecucion"])))
         a("</table></div>")
 
-    # Por cliente
+    # Por cliente — ordenado por dinero en juego (desviación + sin factura),
+    # no por tamaño del cliente. A quién perseguir primero, no el más grande.
     a("<h2>Por cliente</h2>")
-    a('<div class="tabla-scroll"><table><tr><th>Cliente</th><th class="num">Campañas</th>'
-      '<th class="num">Presupuesto</th><th class="num">Consumido</th>'
-      '<th class="num">Facturado</th><th class="num">Ejecución</th>'
-      '<th class="num">Cuadran</th></tr>')
-    for cl in sorted(por_cliente, key=lambda c: -por_cliente[c]["cons"]):
+    a("<p>Ordenado por <strong>dinero en juego</strong>: la suma de lo que tiene "
+      "diferencia de facturación más lo que se gastó y no aparece en ninguna "
+      "factura. El cliente más arriba es el que conviene revisar primero.</p>")
+    cabeceras_cl = ('<th>Cliente</th><th class="num">Campañas</th>'
+                    '<th class="num">Presupuesto</th><th class="num">Consumido</th>'
+                    '<th class="num">Facturado</th><th class="num">Ejecución</th>'
+                    '<th class="num">Cuadran</th><th class="num">Dinero en juego</th>')
+    if anterior:
+        cabeceras_cl += '<th class="num">Vs. mes anterior</th>'
+    a('<div class="tabla-scroll"><table><tr>%s</tr>' % cabeceras_cl)
+    for cl in sorted(por_cliente, key=lambda c: -por_cliente[c]["riesgo"]):
         d = por_cliente[cl]
         eje = desviacion(d["cons"], d["plan"]) if d["plan"] else None
-        a('<tr><td>%s</td><td class="num">%d</td><td class="num">%s</td>'
-          '<td class="num">%s</td><td class="num">%s</td><td class="num">%s</td>'
-          '<td class="num">%d de %d</td></tr>' % (
-              cl, d["n"], dinero(d["plan"]), dinero(d["cons"]), dinero(d["fact"]),
-              porcentaje(eje), d["ok"], d["n"]))
+        fila = ('<tr><td>%s</td><td class="num">%d</td><td class="num">%s</td>'
+                '<td class="num">%s</td><td class="num">%s</td><td class="num">%s</td>'
+                '<td class="num">%d de %d</td><td class="num">%s</td>' % (
+                    cl, d["n"], dinero(d["plan"]), dinero(d["cons"]), dinero(d["fact"]),
+                    porcentaje(eje), d["ok"], d["n"],
+                    dinero(d["riesgo"]) if d["riesgo"] else "—"))
+        if anterior:
+            fila += '<td class="num">%s</td>' % porcentaje(d.get("cambio"))
+        a(fila + "</tr>")
     a("</table></div>")
 
     # Plataformas
@@ -620,8 +711,9 @@ porcentaje: se listan aparte.</div>
         v = plataformas[p]
         ancho = (v / tope * 100) if tope else 0
         parte = (v / total_cons * 100) if total_cons else 0
-        a('<h3>%s — %s (%.1f %%)</h3><div class="barra"><span style="width:%.1f%%"></span></div>'
-          % (p, dinero(v), parte, ancho))
+        a('<h3>%s — %s (%.1f %%, %d campañas)</h3>'
+          '<div class="barra"><span style="width:%.1f%%"></span></div>'
+          % (p, dinero(v), parte, plataformas_n.get(p, 0), ancho))
 
     # Sin medir
     a("<h2>Lo que no se pudo conciliar</h2>")
@@ -670,6 +762,31 @@ porcentaje: se listan aparte.</div>
     with open(ruta, "w", encoding="utf-8") as f:
         f.write("\n".join(h))
     return ruta
+
+
+# ------------------------------------------------------------ mes anterior
+def leer_facturado_anterior(ruta):
+    """Facturado por cliente del consolidado de un mes anterior, si existe.
+
+    Solo lee ese archivo, nunca lo toca. Si no existe o no tiene la forma
+    esperada, se devuelve None: sin comparación, no una comparación inventada.
+    """
+    if not os.path.exists(ruta):
+        return None
+    try:
+        libro = openpyxl.load_workbook(ruta, read_only=True, data_only=True)
+        if "Resumen por cliente" not in libro.sheetnames:
+            return None
+        hoja = libro["Resumen por cliente"]
+        datos = {}
+        for fila in hoja.iter_rows(min_row=2, values_only=True):
+            if not fila or fila[0] is None:
+                continue
+            cliente, facturado = fila[0], fila[4] if len(fila) > 4 else None
+            datos[cliente] = facturado
+        return datos
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------- principal
@@ -752,10 +869,21 @@ def main():
     mes_num = MESES.index(args.mes) + 1 if args.mes in MESES else 0
     sello = "%04d-%02d" % (args.anio, mes_num)
 
+    anterior = None
+    if mes_num:
+        mes_ant, anio_ant = (mes_num - 1, args.anio) if mes_num > 1 else (12, args.anio - 1)
+        sello_ant = "%04d-%02d" % (anio_ant, mes_ant)
+        anterior = leer_facturado_anterior(
+            os.path.join(salida, "%s-consolidado-pautas.xlsx" % sello_ant))
+        contexto["Comparación con el mes anterior"] = (
+            "%s-consolidado-pautas.xlsx (columna Facturado de 'Resumen por cliente')"
+            % sello_ant if anterior else
+            "No hay consolidado de %s en workspace/, no se compara" % sello_ant)
+
     ruta_x = escribir_excel(os.path.join(salida, "%s-consolidado-pautas.xlsx" % sello),
                             filas, incidencias, contexto)
     ruta_h = escribir_html(os.path.join(salida, "%s-informe-conciliacion.html" % sello),
-                           filas, incidencias, contexto)
+                           filas, incidencias, contexto, anterior)
 
     cuenta, cuenta_e = {}, {}
     for f in filas:

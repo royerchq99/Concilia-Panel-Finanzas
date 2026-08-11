@@ -263,6 +263,49 @@ def factura_linkedin(ruta):
     return ruta
 
 
+def factura_tiktok_repetida(ruta):
+    """Un segundo PDF de TikTok, DISTINTO del original (otro número de factura,
+    otros bytes), que por error vuelve a facturar la misma campaña por el mismo
+    importe exacto. No es el "duplicado exacto" (ese es una copia byte a byte
+    del mismo archivo, ya probado abajo): esto es un archivo genuinamente
+    distinto que coincide en campaña + importe, el caso que debe cazar el aviso
+    de "posibles facturas duplicadas".
+    """
+    p = Hoja()
+    p.add_page()
+    p.linea("TIKTOK INC.", 13, 7, True)
+    p.linea("INVOICE")
+    p.linea("Client Name Agencia Velaria SAS Invoice # MUUS20260099888")
+    p.linea("Invoice Date August 03, 2026")
+    p.linea("Billing Period : July 01, 2026 - July 31, 2026")
+    p.ln(4)
+    p.linea("Consumption Details:", 10, 6, True)
+    p.ln(2)
+    p.set_font("Helvetica", "B", 7)
+    cols = [20, 28, 62, 18, 30, 30]
+    cab = ["Statement", "Advertiser", "Campaign Name", "Target\nCountry",
+           "Total Consumption\nin COP", "Cash Consumption\nCOP"]
+    y0 = p.get_y()
+    for w, t in zip(cols, cab):
+        x0 = p.get_x()
+        p.multi_cell(w, 5, t, border=1, new_x="RIGHT", new_y="TOP",
+                     max_line_height=5)
+        p.set_xy(x0 + w, y0)
+    p.ln(11)
+    p.set_font("Helvetica", "", 8)
+    # Mismo importe que la factura original de vel-becas: 620.000,00
+    fila = ("ST9925", "Velaria", "vel-becas_2026-pre-tiktok-cpc", "CO",
+            "620,000.00", "620,000.00")
+    y0 = p.get_y()
+    for w, t in zip(cols, fila):
+        x0 = p.get_x()
+        p.multi_cell(w, 6, t, border=1, new_x="RIGHT", new_y="TOP",
+                     max_line_height=6)
+        p.set_xy(x0 + w, y0)
+    p.output(ruta)
+    return ruta
+
+
 def factura_desconocida(ruta):
     """Una plataforma que el kit NO conoce: tiene que decirlo, no inventarse nada."""
     p = Hoja()
@@ -291,6 +334,7 @@ def main():
     factura_meta(os.path.join(FACTURAS,
                               "2026-07-31T21-14 Transaccion n 3011223344556677.pdf"))
     factura_tiktok(os.path.join(FACTURAS, "MUUS20260099887-Velaria-Invoice.pdf"))
+    factura_tiktok_repetida(os.path.join(FACTURAS, "MUUS20260099888-Velaria-Invoice.pdf"))
     factura_linkedin(os.path.join(FACTURAS, "VELARIA LINKEDIN 78990011223.pdf"))
     factura_desconocida(os.path.join(FACTURAS, "PR-2026-4417 Publired.pdf"))
 
@@ -300,7 +344,8 @@ def main():
         datos = f.read()
     with open(os.path.join(FACTURAS, "9900112233 (1).pdf"), "wb") as f:
         f.write(datos)
-    print("   6 facturas (una es copia exacta de otra, a propósito)")
+    print("   8 facturas (una es copia exacta de otra, y otra repite un importe "
+          "en un archivo distinto, a propósito)")
     print("Listo. Están en ejemplos/pautas y ejemplos/facturas")
 
 
