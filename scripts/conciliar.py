@@ -375,7 +375,38 @@ def porcentaje(v):
     return "%+.1f %%" % (v * 100)
 
 
-def escribir_html(ruta, filas, incidencias, contexto, anterior=None):
+_SIN_TILDES = str.maketrans("áéíóúÁÉÍÓÚñÑ", "aeiouAEIOUnN")
+
+
+def sin_tildes(texto):
+    """Para el resumen de WhatsApp: sin tildes ni eñes rompe menos que con
+    ellas, y así el texto se pega igual de bien copiado a mano."""
+    return texto.translate(_SIN_TILDES)
+
+
+def sparkline(valores, ancho=64, alto=20):
+    """Línea simple en SVG con el % de campañas que cuadran mes a mes.
+
+    `valores` es una lista de 0-100 (o None si ese mes no se pudo calcular),
+    del más antiguo al más reciente. Sin librería de gráficos: solo un
+    <polyline>. Con menos de dos puntos no hay línea que trazar.
+    """
+    puntos = [(i, v) for i, v in enumerate(valores) if v is not None]
+    if len(puntos) < 2:
+        return ""
+    paso = ancho / (len(valores) - 1) if len(valores) > 1 else 0
+    coords = " ".join(
+        "%.1f,%.1f" % (i * paso, alto - (v / 100 * (alto - 4)) - 2)
+        for i, v in puntos)
+    return ('<svg width="%d" height="%d" viewBox="0 0 %d %d" '
+            'style="vertical-align:middle">'
+            '<polyline points="%s" fill="none" stroke="#44546a" '
+            'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'
+            '</svg>' % (ancho, alto, ancho, alto, coords))
+
+
+def escribir_html(ruta, filas, incidencias, contexto, anterior=None,
+                  historico=None, acumulado=None):
     producto, firma, pie = leer_marca()
     total_plan = sum(f["plan"] or 0 for f in filas)
     total_cons = sum(f["consumido"] or 0 for f in filas)
@@ -398,6 +429,12 @@ def escribir_html(ruta, filas, incidencias, contexto, anterior=None):
     cobertura_pct = (con_pauta / total_vistas * 100) if total_vistas else 0
 
     duplicados = [f for f in filas if f.get("posible_duplicado")]
+
+    # Clientes que no aparecen en ningún mes del histórico: es la primera vez
+    # que se les ve, no un hueco de datos.
+    clientes_con_historia = set()
+    for _, resumen in (historico or []):
+        clientes_con_historia |= set(resumen.keys())
 
     n = len(filas)
     # El veredicto es sobre la facturación, y solo sobre lo que se PUEDE juzgar:
@@ -481,6 +518,15 @@ def escribir_html(ruta, filas, incidencias, contexto, anterior=None):
     sin_medir = [f for f in filas
                  if f["estado"] in ("SIN FACTURA", "SIN PAUTA", "SIN DATOS")]
 
+    # Resumen corto para pegar en WhatsApp: sin tildes, sin nada que rompa un
+    # mensaje. Solo las cifras que ya están en el veredicto de arriba.
+    resumen_wpp = sin_tildes(
+        "%s %s: %d de %d campanas conciliables cuadran (%.0f%%). "
+        "%d con diferencia de facturacion, %d sin factura, %d sin pauta." % (
+            contexto["mes"], contexto["anio"], conciliadas, comparables, pct_ok,
+            cuenta.get("DESVIACION EN FACTURACION", 0), cuenta.get("SIN FACTURA", 0),
+            cuenta.get("SIN PAUTA", 0)))
+
     h = []
     a = h.append
     a("""<meta charset="utf-8">
@@ -534,6 +580,12 @@ font-weight:600;padding:9px 16px;border-radius:7px;cursor:pointer;line-height:1}
 .boton:hover{background:#eaeff5;border-color:#c3ccd6}
 .boton:active{transform:translateY(1px)}
 .pista{color:var(--suave);font-size:12px;text-align:right;margin:0 0 18px}
+.buscador{border:1px solid var(--linea);border-radius:7px;padding:9px 12px;
+font:inherit;font-size:13.5px;width:240px;max-width:60vw}
+.buscador:focus{outline:2px solid #b7c3d0;outline-offset:1px}
+.nuevo{display:inline-block;padding:1px 7px;border-radius:4px;font-size:10.5px;
+font-weight:600;background:#dfeaf7;color:#1f4f7a;margin-left:6px;vertical-align:middle}
+.tendencia{vertical-align:middle}
 @media print{
   body{font-size:10.5pt;padding:0}
   .hoja{max-width:none}
@@ -551,16 +603,25 @@ font-weight:600;padding:9px 16px;border-radius:7px;cursor:pointer;line-height:1}
 </style>
 <div class="hoja">
 <div class="barra-acciones noimprimir">
+<input class="buscador" id="buscador" type="text" autocomplete="off"
+placeholder="Buscar cliente o campaña…"
+oninput="var q=this.value.toLowerCase();document.querySelectorAll('table tr').forEach(function(tr){if(tr.querySelector('th')){return;}var texto=tr.textContent.toLowerCase();tr.style.display=(q===''||texto.indexOf(q)!==-1)?'':'none';});">
+<button class="boton" id="boton-wpp" type="button"
+onclick="var t=document.getElementById('resumen-wpp');t.focus();t.select();t.setSelectionRange(0,999999);try{document.execCommand('copy');}catch(e){}var b=this;var o=b.textContent;b.textContent='Copiado';setTimeout(function(){b.textContent=o;},1800);">
+Copiar resumen para WhatsApp</button>
 <button class="boton" onclick="window.print()" type="button">
 Descargar en PDF</button>
 </div>
+<textarea id="resumen-wpp" class="noimprimir" readonly
+style="position:absolute;left:-9999px;top:0">%(resumen_wpp)s</textarea>
 <p class="pista noimprimir">Se abre la ventana de impresión: elige
-<strong>Guardar como PDF</strong> en el destino.</p>
+<strong>Guardar como PDF</strong> en el destino. El buscador filtra todas las
+tablas de abajo a la vez.</p>
 <h1>%(producto)s</h1>
 <p class="sub">Conciliación de pautas · %(mes)s %(anio)s ·
 Generado el %(hoy)s%(firma_sub)s</p>
 """
-      % dict(contexto, producto=producto,
+      % dict(contexto, producto=producto, resumen_wpp=resumen_wpp,
                firma_sub=(" por " + firma) if firma else ""))
 
     a("""<div class="veredicto %s">
@@ -678,32 +739,89 @@ porcentaje: se listan aparte.</div>
                   porcentaje(f["desv_ejecucion"])))
         a("</table></div>")
 
+    # Tendencia por cliente: % de campañas que cuadran en cada mes del
+    # histórico encontrado, más este mes al final. Solo con los meses que
+    # existen como archivo — los que faltan no cuentan como 0, se saltan.
+    tendencia_por_cliente = {}
+    if historico:
+        for cl in por_cliente:
+            serie = []
+            for _, resumen in historico:
+                v = resumen.get(cl)
+                if v and v.get("campanas"):
+                    serie.append((v.get("cuadran") or 0) / v["campanas"] * 100)
+                else:
+                    serie.append(None)
+            d = por_cliente[cl]
+            serie.append((d["ok"] / d["n"] * 100) if d["n"] else None)
+            tendencia_por_cliente[cl] = serie
+
     # Por cliente — ordenado por dinero en juego (desviación + sin factura),
     # no por tamaño del cliente. A quién perseguir primero, no el más grande.
     a("<h2>Por cliente</h2>")
     a("<p>Ordenado por <strong>dinero en juego</strong>: la suma de lo que tiene "
       "diferencia de facturación más lo que se gastó y no aparece en ninguna "
-      "factura. El cliente más arriba es el que conviene revisar primero.</p>")
+      "factura. El cliente más arriba es el que conviene revisar primero.")
+    if historico:
+        a(" La columna Tendencia es el %% de campañas que cuadran, mes a mes, "
+          "de los últimos %d meses con datos hasta este." % (len(historico) + 1))
+    a("</p>")
     cabeceras_cl = ('<th>Cliente</th><th class="num">Campañas</th>'
                     '<th class="num">Presupuesto</th><th class="num">Consumido</th>'
                     '<th class="num">Facturado</th><th class="num">Ejecución</th>'
                     '<th class="num">Cuadran</th><th class="num">Dinero en juego</th>')
     if anterior:
         cabeceras_cl += '<th class="num">Vs. mes anterior</th>'
+    if historico:
+        cabeceras_cl += '<th>Tendencia</th>'
     a('<div class="tabla-scroll"><table><tr>%s</tr>' % cabeceras_cl)
     for cl in sorted(por_cliente, key=lambda c: -por_cliente[c]["riesgo"]):
         d = por_cliente[cl]
         eje = desviacion(d["cons"], d["plan"]) if d["plan"] else None
+        nombre = cl
+        if historico and cl not in clientes_con_historia:
+            nombre += '<span class="nuevo">nuevo</span>'
         fila = ('<tr><td>%s</td><td class="num">%d</td><td class="num">%s</td>'
                 '<td class="num">%s</td><td class="num">%s</td><td class="num">%s</td>'
                 '<td class="num">%d de %d</td><td class="num">%s</td>' % (
-                    cl, d["n"], dinero(d["plan"]), dinero(d["cons"]), dinero(d["fact"]),
+                    nombre, d["n"], dinero(d["plan"]), dinero(d["cons"]), dinero(d["fact"]),
                     porcentaje(eje), d["ok"], d["n"],
                     dinero(d["riesgo"]) if d["riesgo"] else "—"))
         if anterior:
             fila += '<td class="num">%s</td>' % porcentaje(d.get("cambio"))
+        if historico:
+            fila += '<td class="tendencia">%s</td>' % sparkline(
+                tendencia_por_cliente.get(cl, []))
         a(fila + "</tr>")
     a("</table></div>")
+
+    # Acumulado del año: lo de este mes sumado a lo de los meses anteriores
+    # de este mismo año que existan como archivo en workspace/. Si falta un
+    # mes en medio, ese cliente simplemente no suma nada de ese hueco — no se
+    # rellena con una estimación.
+    if acumulado is not None:
+        combinado = {cl: dict(v) for cl, v in acumulado.items()}
+        for cl, d in por_cliente.items():
+            c = combinado.setdefault(cl, {"consumido": 0.0, "facturado": 0.0, "meses": 0})
+            c["consumido"] += d["cons"]
+            c["facturado"] += d["fact"]
+            c["meses"] += 1
+        if combinado:
+            a("<h2>Acumulado del año</h2>")
+            a("<p>Lo de %s %s sumado a los meses anteriores de %s de los que hay "
+              "consolidado guardado en <code>workspace/</code>, cliente a cliente. "
+              "Si falta un mes en medio, no se rellena: ese cliente acumula menos "
+              "meses que los demás y se nota en la columna Meses.</p>"
+              % (contexto["mes"], contexto["anio"], contexto["anio"]))
+            a('<div class="tabla-scroll"><table><tr><th>Cliente</th>'
+              '<th class="num">Meses</th><th class="num">Consumido acumulado</th>'
+              '<th class="num">Facturado acumulado</th></tr>')
+            for cl in sorted(combinado, key=lambda c: -combinado[c]["facturado"]):
+                c = combinado[cl]
+                a('<tr><td>%s</td><td class="num">%d</td><td class="num">%s</td>'
+                  '<td class="num">%s</td></tr>' % (
+                      cl, c["meses"], dinero(c["consumido"]), dinero(c["facturado"])))
+            a("</table></div>")
 
     # Plataformas
     a("<h2>Dónde está la inversión</h2>")
@@ -764,12 +882,14 @@ porcentaje: se listan aparte.</div>
     return ruta
 
 
-# ------------------------------------------------------------ mes anterior
-def leer_facturado_anterior(ruta):
-    """Facturado por cliente del consolidado de un mes anterior, si existe.
+# ------------------------------------------------------------ meses pasados
+def leer_resumen_mes(ruta):
+    """Resumen por cliente del consolidado de un mes, si el archivo existe.
 
     Solo lee ese archivo, nunca lo toca. Si no existe o no tiene la forma
     esperada, se devuelve None: sin comparación, no una comparación inventada.
+    Cada cliente trae campañas, consumido, facturado y cuántas cuadran —
+    lo que hace falta para comparar, para el histórico y para el acumulado.
     """
     if not os.path.exists(ruta):
         return None
@@ -782,11 +902,29 @@ def leer_facturado_anterior(ruta):
         for fila in hoja.iter_rows(min_row=2, values_only=True):
             if not fila or fila[0] is None:
                 continue
-            cliente, facturado = fila[0], fila[4] if len(fila) > 4 else None
-            datos[cliente] = facturado
+            cliente = fila[0]
+            datos[cliente] = {
+                "campanas": fila[1] if len(fila) > 1 else None,
+                "consumido": fila[3] if len(fila) > 3 else None,
+                "facturado": fila[4] if len(fila) > 4 else None,
+                "cuadran": fila[6] if len(fila) > 6 else None,
+            }
         return datos
     except Exception:
         return None
+
+
+def meses_hacia_atras(anio, mes_num, cuantos):
+    """Lista de (año, mes) de los `cuantos` meses anteriores a anio/mes_num,
+    del más reciente al más antiguo. Cruza el año hacia atrás sin problema."""
+    resultado = []
+    a, m = anio, mes_num
+    for _ in range(cuantos):
+        m -= 1
+        if m == 0:
+            m, a = 12, a - 1
+        resultado.append((a, m))
+    return resultado
 
 
 # ---------------------------------------------------------------- principal
@@ -869,21 +1007,52 @@ def main():
     mes_num = MESES.index(args.mes) + 1 if args.mes in MESES else 0
     sello = "%04d-%02d" % (args.anio, mes_num)
 
-    anterior = None
+    anterior, historico, acumulado = None, [], None
     if mes_num:
         mes_ant, anio_ant = (mes_num - 1, args.anio) if mes_num > 1 else (12, args.anio - 1)
         sello_ant = "%04d-%02d" % (anio_ant, mes_ant)
-        anterior = leer_facturado_anterior(
+        resumen_ant = leer_resumen_mes(
             os.path.join(salida, "%s-consolidado-pautas.xlsx" % sello_ant))
+        if resumen_ant:
+            anterior = {cl: v["facturado"] for cl, v in resumen_ant.items()}
         contexto["Comparación con el mes anterior"] = (
             "%s-consolidado-pautas.xlsx (columna Facturado de 'Resumen por cliente')"
             % sello_ant if anterior else
             "No hay consolidado de %s en workspace/, no se compara" % sello_ant)
 
+        # Histórico: hasta 6 meses hacia atrás, solo los que existan como
+        # archivo, del más antiguo al más reciente (para dibujar la tendencia
+        # en ese orden). No se completan los meses que faltan.
+        for a_h, m_h in reversed(meses_hacia_atras(args.anio, mes_num, 6)):
+            sello_h = "%04d-%02d" % (a_h, m_h)
+            resumen_h = leer_resumen_mes(
+                os.path.join(salida, "%s-consolidado-pautas.xlsx" % sello_h))
+            if resumen_h:
+                historico.append((sello_h, resumen_h))
+
+        # Acumulado del año: suma de los meses anteriores de este mismo año
+        # que existan como archivo. Este mes se le suma dentro de
+        # escribir_html, que es donde ya se calculan sus totales por cliente.
+        meses_previos = list(range(1, mes_num))
+        if meses_previos:
+            acumulado = {}
+            for m_a in meses_previos:
+                sello_a = "%04d-%02d" % (args.anio, m_a)
+                resumen_a = leer_resumen_mes(
+                    os.path.join(salida, "%s-consolidado-pautas.xlsx" % sello_a))
+                if not resumen_a:
+                    continue
+                for cl, v in resumen_a.items():
+                    d = acumulado.setdefault(
+                        cl, {"consumido": 0.0, "facturado": 0.0, "meses": 0})
+                    d["consumido"] += v["consumido"] or 0.0
+                    d["facturado"] += v["facturado"] or 0.0
+                    d["meses"] += 1
+
     ruta_x = escribir_excel(os.path.join(salida, "%s-consolidado-pautas.xlsx" % sello),
                             filas, incidencias, contexto)
     ruta_h = escribir_html(os.path.join(salida, "%s-informe-conciliacion.html" % sello),
-                           filas, incidencias, contexto, anterior)
+                           filas, incidencias, contexto, anterior, historico, acumulado)
 
     cuenta, cuenta_e = {}, {}
     for f in filas:

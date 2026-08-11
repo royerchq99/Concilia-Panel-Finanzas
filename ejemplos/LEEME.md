@@ -12,6 +12,12 @@ python scripts/verificar.py --mes Julio --anio 2026 --ejemplo
 
 O simplemente dile al asistente: **"prueba con el ejemplo"**.
 
+Corre primero **Junio** y después **Julio** (el Excel de pauta trae las dos
+hojas) si quieres ver también la comparación con el mes anterior, la
+tendencia de varios meses y el acumulado del año — con un solo mes esas tres
+secciones no salen (no hay nada con qué comparar todavía, y eso también es
+correcto: no se inventa una tendencia con un solo punto).
+
 ## Qué hay dentro
 
 **`pautas/`** — dos clientes inventados, con hojas de Junio y Julio:
