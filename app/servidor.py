@@ -96,7 +96,7 @@ def pedir_clave():
 @app.get("/salud")
 def salud():
     """Le dice al servidor que el panel sigue vivo. Sin datos dentro."""
-    return jsonify(estado="ok")
+    return jsonify(estado="ok", prueba_despliegue="2026-08-10-1")
 
 
 def crear_app():
