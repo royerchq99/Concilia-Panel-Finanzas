@@ -240,6 +240,30 @@ def api_vaciar():
                    facturas=listar("facturas"))
 
 
+@app.post("/api/quitar")
+def api_quitar():
+    """Borra UN archivo, no toda la carpeta. `vaciar` sigue existiendo para
+    borrar todo de golpe; esto es para quitar uno que se subió por error."""
+    datos = request.get_json(silent=True) or {}
+    tipo = datos.get("tipo")
+    if tipo not in ("pautas", "facturas"):
+        return jsonify(error="Tipo de archivo desconocido"), 400
+    nombre = nombre_seguro(datos.get("nombre") or "")
+    if not nombre:
+        return jsonify(error="No sé qué archivo quieres quitar"), 400
+
+    destino = carpeta(tipo)
+    ruta = os.path.join(destino, nombre)
+    # nombre_seguro() ya quita rutas y ".."; esto es una segunda comprobación
+    # para no borrar nada fuera de su carpeta.
+    if os.path.dirname(os.path.abspath(ruta)) != os.path.abspath(destino):
+        return jsonify(error="Nombre de archivo no válido"), 400
+    if not os.path.isfile(ruta):
+        return jsonify(error="Ese archivo ya no está"), 404
+    os.remove(ruta)
+    return jsonify(pautas=listar("pautas"), facturas=listar("facturas"))
+
+
 @app.post("/api/ejemplo")
 def api_ejemplo():
     """Genera el caso de práctica inventado y lo deja listo para conciliar."""
@@ -335,13 +359,54 @@ def api_conciliar():
 
     if not os.path.isdir(WORKSPACE):
         os.makedirs(WORKSPACE)
-    sello = "%04d-%02d" % (anio, lector_pautas.MESES.index(mes) + 1)
+    mes_num = lector_pautas.MESES.index(mes) + 1
+    sello = "%04d-%02d" % (anio, mes_num)
+
+    # Mismo cálculo que hace conciliar.py en su línea de comandos: sin esto el
+    # informe del panel se queda sin comparación, tendencia ni acumulado
+    # aunque el motor ya los sabe hacer.
+    mes_ant, anio_ant = (mes_num - 1, anio) if mes_num > 1 else (12, anio - 1)
+    sello_ant = "%04d-%02d" % (anio_ant, mes_ant)
+    resumen_ant = motor.leer_resumen_mes(
+        os.path.join(WORKSPACE, "%s-consolidado-pautas.xlsx" % sello_ant))
+    anterior = ({cl: v["facturado"] for cl, v in resumen_ant.items()}
+                if resumen_ant else None)
+    contexto["Comparación con el mes anterior"] = (
+        "%s-consolidado-pautas.xlsx (columna Facturado de 'Resumen por cliente')"
+        % sello_ant if anterior else
+        "No hay consolidado de %s en workspace/, no se compara" % sello_ant)
+
+    historico = []
+    for a_h, m_h in reversed(motor.meses_hacia_atras(anio, mes_num, 6)):
+        sello_h = "%04d-%02d" % (a_h, m_h)
+        resumen_h = motor.leer_resumen_mes(
+            os.path.join(WORKSPACE, "%s-consolidado-pautas.xlsx" % sello_h))
+        if resumen_h:
+            historico.append((sello_h, resumen_h))
+
+    acumulado = None
+    meses_previos = list(range(1, mes_num))
+    if meses_previos:
+        acumulado = {}
+        for m_a in meses_previos:
+            sello_a = "%04d-%02d" % (anio, m_a)
+            resumen_a = motor.leer_resumen_mes(
+                os.path.join(WORKSPACE, "%s-consolidado-pautas.xlsx" % sello_a))
+            if not resumen_a:
+                continue
+            for cl, v in resumen_a.items():
+                d = acumulado.setdefault(
+                    cl, {"consumido": 0.0, "facturado": 0.0, "meses": 0})
+                d["consumido"] += v["consumido"] or 0.0
+                d["facturado"] += v["facturado"] or 0.0
+                d["meses"] += 1
+
     ruta_x = motor.escribir_excel(
         os.path.join(WORKSPACE, "%s-consolidado-pautas.xlsx" % sello),
         filas, incidencias, contexto)
     ruta_h = motor.escribir_html(
         os.path.join(WORKSPACE, "%s-informe-conciliacion.html" % sello),
-        filas, incidencias, contexto)
+        filas, incidencias, contexto, anterior, historico, acumulado)
 
     ESTADO["filas"] = filas
     ESTADO["contexto"] = contexto
@@ -358,6 +423,7 @@ def api_conciliar():
         return sum(v) if v else None
 
     comparables = cf.get("CUADRA", 0) + cf.get("DESVIACION EN FACTURACION", 0)
+    duplicados = [f for f in filas if f.get("posible_duplicado")]
     return jsonify({
         "sello": sello,
         "campanas": len(filas),
@@ -371,6 +437,11 @@ def api_conciliar():
         "cuadran": cf.get("CUADRA", 0),
         "incidencias": [{"archivo": i.get("archivo"), "tipo": i.get("tipo"),
                          "detalle": i.get("detalle")} for i in incidencias],
+        "duplicados": [{"campana": f["campana"], "cliente": f.get("cliente"),
+                        "facturado": f.get("facturado"),
+                        "archivos": f.get("archivos_duplicados", [])}
+                       for f in duplicados],
+        "tiene_historico": bool(historico),
         "aviso_trm": aviso_trm,
         "excel": os.path.basename(ruta_x),
         "informe": os.path.basename(ruta_h),

@@ -3,6 +3,30 @@
 
 var usandoEjemplo = false;
 
+/* ------------------------------------------------------------ tema */
+/* Se guarda solo si el usuario lo cambia a mano; si no, sigue al sistema
+   (la media query de estilo.css ya lo hace sola). */
+(function () {
+  var guardado = localStorage.getItem("concilia-tema");
+  if (guardado === "claro" || guardado === "oscuro") {
+    document.documentElement.setAttribute("data-tema", guardado);
+  }
+})();
+
+document.addEventListener("DOMContentLoaded", function () {
+  var btn = document.getElementById("btn-tema");
+  if (!btn) return;
+  btn.addEventListener("click", function () {
+    var prefiereOscuro = window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var actual = document.documentElement.getAttribute("data-tema") ||
+      (prefiereOscuro ? "oscuro" : "claro");
+    var nuevo = actual === "oscuro" ? "claro" : "oscuro";
+    document.documentElement.setAttribute("data-tema", nuevo);
+    localStorage.setItem("concilia-tema", nuevo);
+  });
+});
+
 /* ------------------------------------------------------------ utilidades */
 function $(s) { return document.querySelector(s); }
 function $$(s) { return Array.prototype.slice.call(document.querySelectorAll(s)); }
@@ -81,7 +105,7 @@ function habilitar(nombres) {
 }
 
 /* ------------------------------------------------------------ archivos */
-function pintarLista(id, archivos, tipo) {
+function pintarLista(id, archivos, tipo, tipoArchivo) {
   var ul = $(id);
   ul.innerHTML = "";
   if (!archivos.length) {
@@ -93,9 +117,31 @@ function pintarLista(id, archivos, tipo) {
   }
   archivos.forEach(function (a) {
     var li = document.createElement("li");
-    li.innerHTML = "<span>" + escapar(a.nombre) + "</span><span>" + a.kb + " KB</span>";
+    li.innerHTML =
+      "<span class='info'><span>" + escapar(a.nombre) + "</span>" +
+      "<span class='kb'>" + a.kb + " KB</span></span>";
+    if (tipoArchivo && !usandoEjemplo) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "quitar-archivo";
+      btn.title = "Quitar " + a.nombre;
+      btn.setAttribute("aria-label", "Quitar " + a.nombre);
+      btn.textContent = "×";
+      btn.addEventListener("click", function () { quitarArchivo(tipoArchivo, a.nombre); });
+      li.appendChild(btn);
+    }
     ul.appendChild(li);
   });
+}
+
+function quitarArchivo(tipo, nombre) {
+  pedir("/api/quitar", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tipo: tipo, nombre: nombre })
+  }).then(function (r) {
+    pintarLista("#lista-pautas", r.pautas, "ningún Excel de pauta", "pautas");
+    pintarLista("#lista-facturas", r.facturas, "ninguna factura", "facturas");
+  }).catch(function (e) { avisar(e.message); });
 }
 
 function refrescarEstado() {
@@ -111,8 +157,8 @@ function refrescarEstado() {
       $("#mes").value = e.meses[hoy.getMonth() === 0 ? 11 : hoy.getMonth() - 1];
       $("#anio").value = e.anio_sugerido;
     }
-    pintarLista("#lista-pautas", e.pautas, "ningún Excel de pauta");
-    pintarLista("#lista-facturas", e.facturas, "ninguna factura");
+    pintarLista("#lista-pautas", e.pautas, "ningún Excel de pauta", "pautas");
+    pintarLista("#lista-facturas", e.facturas, "ninguna factura", "facturas");
     return e;
   });
 }
@@ -126,8 +172,8 @@ function subir(tipo, ficheros) {
   pedir("/api/subir", { method: "POST", body: fd })
     .then(function (r) {
       usandoEjemplo = false;
-      pintarLista("#lista-pautas", r.pautas, "ningún Excel de pauta");
-      pintarLista("#lista-facturas", r.facturas, "ninguna factura");
+      pintarLista("#lista-pautas", r.pautas, "ningún Excel de pauta", "pautas");
+      pintarLista("#lista-facturas", r.facturas, "ninguna factura", "facturas");
       if (r.rechazados.length) {
         avisar("No he podido aceptar " + r.rechazados.length + " archivo(s):\n" +
           r.rechazados.map(function (x) { return "- **" + x.nombre + "** — " + x.motivo; }).join("\n"));
@@ -164,6 +210,9 @@ function subir(tipo, ficheros) {
 });
 
 $("#btn-vaciar").addEventListener("click", function () {
+  if (!window.confirm("¿Borrar todos los archivos subidos? No se puede deshacer.")) {
+    return;
+  }
   esperar("Vaciando…");
   pedir("/api/vaciar", {
     method: "POST", headers: { "Content-Type": "application/json" },
@@ -171,8 +220,8 @@ $("#btn-vaciar").addEventListener("click", function () {
   }).then(function (r) {
     usandoEjemplo = false;
     marcarModoEjemplo(false);
-    pintarLista("#lista-pautas", r.pautas, "ningún Excel de pauta");
-    pintarLista("#lista-facturas", r.facturas, "ninguna factura");
+    pintarLista("#lista-pautas", r.pautas, "ningún Excel de pauta", "pautas");
+    pintarLista("#lista-facturas", r.facturas, "ninguna factura", "facturas");
     avisar("Listo, he borrado " + r.borrados + " archivo(s).", "ok");
   }).catch(function (e) { avisar(e.message); }).then(finEspera);
 });
@@ -186,10 +235,10 @@ $("#btn-ejemplo").addEventListener("click", function () {
       $("#anio").value = 2026;
       // Se pintan los archivos DEL EJEMPLO: si no, las listas siguen mostrando
       // entrada/ (vacía) y parece que no ha pasado nada.
-      pintarLista("#lista-pautas", r.pautas, "ningún Excel de pauta");
-      pintarLista("#lista-facturas", r.facturas, "ninguna factura");
+      pintarLista("#lista-pautas", r.pautas, "ningún Excel de pauta", "pautas");
+      pintarLista("#lista-facturas", r.facturas, "ninguna factura", "facturas");
       marcarModoEjemplo(true);
-      avisar("Ejemplo listo: dos clientes inventados con **16 errores metidos a " +
+      avisar("Ejemplo listo: dos clientes inventados con **17 errores metidos a " +
         "propósito**. Está puesto en Julio de 2026. Pulsa **Conciliar** y mira si " +
         "los encuentra todos.", "info");
     })
@@ -274,6 +323,25 @@ function pintarResultado(r) {
     return [k, r.ejecucion[k]];
   }));
 
+  var dup = $("#bloque-duplicados");
+  if (!r.duplicados || !r.duplicados.length) {
+    dup.innerHTML = "";
+  } else {
+    var fd = r.duplicados.map(function (d) {
+      return "<tr><td class='mono'>" + escapar(d.campana) + "</td><td>" +
+        escapar(d.cliente || "—") + "</td><td class='num'>" + dinero(d.facturado) +
+        "</td><td>" + escapar(d.archivos.join(", ")) + "</td></tr>";
+    }).join("");
+    dup.innerHTML = "<div class='aviso-duplicados'>" +
+      "<h2>Posibles facturas duplicadas (" + r.duplicados.length + ")</h2>" +
+      "<p>Dos archivos DISTINTOS facturan la misma campaña por el mismo importe " +
+      "exacto. Puede ser un cobro repetido, o dos cargos legítimos que coinciden " +
+      "— revísalo antes de aprobar el pago.</p>" +
+      "<div class='tabla-scroll'><table><tr><th>Campaña</th><th>Cliente</th>" +
+      "<th class='num'>Facturado</th><th>Archivos en duda</th></tr>" + fd +
+      "</table></div></div>";
+  }
+
   var inc = $("#bloque-incidencias");
   if (!r.incidencias.length) {
     inc.innerHTML = "";
@@ -287,10 +355,39 @@ function pintarResultado(r) {
       "<th>Qué pasa</th></tr>" + f + "</table></div>";
   }
 
+  var resumenTexto = sinTildes(
+    r.sello + ": " + r.cuadran + " de " + r.comparables +
+    " campanas conciliables cuadran (" + pct + "%). " +
+    (r.facturacion["DESVIACION EN FACTURACION"] || 0) + " con diferencia de " +
+    "facturacion, " + (r.facturacion["SIN FACTURA"] || 0) + " sin factura, " +
+    (r.facturacion["SIN PAUTA"] || 0) + " sin pauta.");
+  $("#resumen-wpp-panel").value = resumenTexto;
+
   $("#marco-informe").src = "/api/informe?t=" + Date.now();
   habilitar(["resultado", "informe", "chat"]);
+  $$(".pestana").forEach(function (b) {
+    if (b.dataset.panel === "cerrar") b.classList.add("completa");
+  });
   reiniciarChat();
 }
+
+var SIN_TILDES = { "á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ñ": "n" };
+function sinTildes(t) {
+  return String(t).replace(/[áéíóúñ]/gi, function (c) {
+    var m = SIN_TILDES[c.toLowerCase()];
+    return c === c.toUpperCase() ? m.toUpperCase() : m;
+  });
+}
+
+$("#btn-wpp").addEventListener("click", function () {
+  var t = $("#resumen-wpp-panel");
+  t.focus(); t.select(); t.setSelectionRange(0, 999999);
+  try { document.execCommand("copy"); } catch (e) {}
+  var boton = this;
+  var original = boton.textContent;
+  boton.textContent = "Copiado";
+  setTimeout(function () { boton.textContent = original; }, 1800);
+});
 
 $("#btn-conciliar").addEventListener("click", function () {
   limpiarAviso();
@@ -387,7 +484,12 @@ function reiniciarChat() {
 
 /* ------------------------------------------------------------ arranque */
 refrescarEstado().then(function (e) {
-  if (e.hay_cierre) habilitar(["resultado", "informe", "chat"]);
+  if (e.hay_cierre) {
+    habilitar(["resultado", "informe", "chat"]);
+    $$(".pestana").forEach(function (b) {
+      if (b.dataset.panel === "cerrar") b.classList.add("completa");
+    });
+  }
 }).catch(function () {
   avisar("No he podido hablar con el servidor. ¿Sigue abierta la ventana negra?");
 });

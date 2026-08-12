@@ -23,16 +23,27 @@
         <p class="lema">Pauta, ejecución y factura en la misma tabla</p>
       </div>
     </div>
-    <div class="firma" id="firma"></div>
+    <div class="cabecera-derecha">
+      <div class="firma" id="firma"></div>
+      <button class="boton-tema" id="btn-tema" type="button" title="Cambiar el tema" aria-label="Cambiar el tema">
+        <svg class="icono-sol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="12" r="4.2"/>
+          <path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>
+        </svg>
+        <svg class="icono-luna" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M20.4 14.7A8.5 8.5 0 1 1 9.3 3.6a7 7 0 0 0 11.1 11.1Z"/>
+        </svg>
+      </button>
+    </div>
   </div>
 </header>
 
 <nav class="menu">
   <div class="contenedor menu-fila">
-    <button class="pestana activa" data-panel="cerrar" type="button">1 · Cerrar el mes</button>
-    <button class="pestana" data-panel="resultado" type="button" disabled>2 · Resultado</button>
-    <button class="pestana" data-panel="informe" type="button" disabled>3 · Informe</button>
-    <button class="pestana" data-panel="chat" type="button" disabled>4 · Preguntar</button>
+    <button class="pestana activa" data-panel="cerrar" type="button"><span class="num">1</span> Cerrar el mes</button>
+    <button class="pestana" data-panel="resultado" type="button" disabled><span class="num">2</span> Resultado</button>
+    <button class="pestana" data-panel="informe" type="button" disabled><span class="num">3</span> Informe</button>
+    <button class="pestana" data-panel="chat" type="button" disabled><span class="num">4</span> Preguntar</button>
   </div>
 </nav>
 
@@ -43,6 +54,11 @@
 
     <div class="rejilla-subida">
       <div class="caja-subida" id="zona-pautas" data-tipo="pautas">
+        <svg class="icono-caja" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/>
+          <path d="M14 3v6h6"/>
+          <path d="M9 16h6M9 12.5h3"/>
+        </svg>
         <h2>Excel de pauta</h2>
         <p class="ayuda">Uno por cliente. El nombre del archivo es el cliente, y
           cada hoja es un mes.</p>
@@ -55,6 +71,11 @@
       </div>
 
       <div class="caja-subida" id="zona-facturas" data-tipo="facturas">
+        <svg class="icono-caja" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/>
+          <path d="M14 3v6h6"/>
+          <path d="M9.5 17v-5.5l2 2.4 2-2.4V17"/>
+        </svg>
         <h2>Facturas en PDF</h2>
         <p class="ayuda">Google Ads, Meta, TikTok y LinkedIn. Los duplicados se
           detectan solos.</p>
@@ -105,13 +126,17 @@
     <h2>Ejecución frente al plan</h2>
     <div class="rejilla-datos" id="estados-ejec"></div>
 
+    <div id="bloque-duplicados"></div>
     <div id="bloque-incidencias"></div>
 
     <div class="fila-acciones">
       <a class="boton principal" id="dl-excel" href="/api/descargar/excel">Descargar Excel</a>
       <a class="boton" id="dl-informe" href="/api/descargar/informe">Descargar informe</a>
       <button class="boton" id="btn-ver-informe" type="button">Ver el informe</button>
+      <button class="boton" id="btn-wpp" type="button">Copiar resumen para WhatsApp</button>
     </div>
+    <textarea id="resumen-wpp-panel" readonly
+      style="position:absolute;left:-9999px;top:0"></textarea>
   </section>
 
   <!-- ============ PANEL 3: INFORME ============ -->
