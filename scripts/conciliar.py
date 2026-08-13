@@ -938,6 +938,14 @@ def main():
                    help="Tipo de cambio COP/USD, si no se quiere consultar")
     args = p.parse_args()
 
+    mes = lector_pautas.normalizar_mes(args.mes)
+    if mes is None:
+        print("No reconozco el mes '%s'." % args.mes)
+        print("Escribelo por su nombre: %s." % ", ".join(MESES))
+        print("El numero tambien vale: --mes 7 es Julio.")
+        return 2
+    args.mes = mes
+
     base = "ejemplos" if args.ejemplo else "entrada"
     dir_pautas = os.path.join(RAIZ, base, "pautas")
     dir_facturas = os.path.join(RAIZ, base, "facturas")

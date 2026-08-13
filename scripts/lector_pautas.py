@@ -56,6 +56,28 @@ def sin_tildes(texto):
     return "".join(c for c in t if not unicodedata.combining(c))
 
 
+def normalizar_mes(texto):
+    """Nombre canonico del mes, o None si no se reconoce.
+
+    Acepta "Julio", "julio", "JULIO", "setiembre" y tambien el numero: --mes 7.
+    Antes, un mes que no casaba se colaba sin avisar y el cierre salia vacio,
+    que parece un problema de los datos cuando en realidad es una errata.
+    """
+    if texto is None:
+        return None
+    crudo = str(texto).strip()
+    if crudo.isdigit():
+        numero = int(crudo)
+        return MESES[numero - 1] if 1 <= numero <= 12 else None
+    limpio = sin_tildes(crudo).lower()
+    if limpio == "setiembre":
+        return "Septiembre"
+    for mes in MESES:
+        if sin_tildes(mes).lower() == limpio:
+            return mes
+    return None
+
+
 def llave(nombre):
     """Llave de cruce: minúsculas y sin espacios.
 

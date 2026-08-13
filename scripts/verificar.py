@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import openpyxl
 import lector_facturas
+import lector_pautas
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -50,6 +51,14 @@ def main():
     p.add_argument("--anio", type=int, required=True)
     p.add_argument("--ejemplo", action="store_true")
     args = p.parse_args()
+
+    mes = lector_pautas.normalizar_mes(args.mes)
+    if mes is None:
+        print("No reconozco el mes '%s'." % args.mes)
+        print("Escribelo por su nombre: %s." % ", ".join(MESES))
+        print("El numero tambien vale: --mes 7 es Julio.")
+        return 2
+    args.mes = mes
 
     mes_num = MESES.index(args.mes) + 1 if args.mes in MESES else 0
     sello = "%04d-%02d" % (args.anio, mes_num)
