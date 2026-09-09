@@ -99,6 +99,19 @@ def salud():
     return jsonify(estado="ok")
 
 
+@app.after_request
+def cabeceras_seguridad(resp):
+    # Flask no las pone solas. Inofensivas también en local (abrir.py): solo
+    # le piden al navegador que recuerde HTTPS y no haga cosas raras con un
+    # panel que muestra facturas y datos de clientes reales.
+    resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    resp.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return resp
+
+
 def crear_app():
     """Punto de entrada para el servidor de producción (waitress).
 
