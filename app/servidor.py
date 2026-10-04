@@ -27,6 +27,7 @@ import lector_facturas
 import conciliar as motor
 import trm as modulo_trm
 from consultas import Consultas
+import frenos
 
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
@@ -78,6 +79,12 @@ def pedir_clave():
     if request.path == "/salud":
         return None
 
+    # Freno de intentos (auditoría del 04/10/2026): 5 claves malas desde la misma conexión (o 20 en total)
+    # en 15 minutos, y se espera 15 minutos. Ver app/frenos.py.
+    if request.authorization and frenos.bloqueado():
+        from flask import Response
+        return Response(frenos.AVISO, 429, {"Retry-After": "900"})
+
     auth = request.authorization
     if auth and _igual(auth.password, CLAVE):
         # El usuario solo se comprueba si se ha configurado uno, y sin distinguir
@@ -85,8 +92,11 @@ def pedir_clave():
         # secreto es la contraseña, no el nombre.
         if not USUARIO or _igual(str(auth.username or "").strip().lower(),
                                  USUARIO.lower()):
+            frenos.acierto()
             return None
 
+    if auth:
+        frenos.fallo()
     from flask import Response
     return Response(
         "Este panel está protegido con contraseña.", 401,
