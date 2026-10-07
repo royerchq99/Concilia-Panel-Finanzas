@@ -50,10 +50,18 @@ jobs:
           # --fail sigue puesto para que un error de verdad del servidor
           # (401, 404, 500) tumbe el paso en vez de pasar por bueno un
           # despliegue que no ocurrio.
+          # El aviso iba al puerto 3000. Ese puerto se CERRO el 06/10/2026 (el panel
+          # estaba expuesto sin cifrar), asi que desde entonces el aviso no llegaba y
+          # el despliegue automatico dejo de funcionar EN SILENCIO: curl daba
+          # "timed out" y este paso lo tomaba por "esta compilando".
+          # Se reescribe el servidor sobre la marcha para mandarlo por el dominio del
+          # panel, con candado. Asi NO hay que tocar el secreto: el token sigue dentro.
+          URL=$(printf '%s' "$WEBHOOK" | sed -E 's#^https?://[^/]+#https://admin.roxsolutionscr.com#')
+          echo "::add-mask::$URL"   # que GitHub tape tambien la direccion reescrita
           salida=0
           codigo=$(curl --silent --show-error --fail --max-time 25 \
                         --output respuesta.txt --write-out "%{http_code}" \
-                        -X POST "$WEBHOOK") || salida=$?
+                        -X POST "$URL") || salida=$?
 
           # 28 = se agoto el tiempo de espera. EasyPanel recibio el aviso pero
           # deja la conexion abierta mientras compila, asi que tarda mas de lo
