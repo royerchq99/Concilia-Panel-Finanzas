@@ -63,18 +63,14 @@ jobs:
                         --output respuesta.txt --write-out "%{http_code}" \
                         -X POST "$URL") || salida=$?
 
-          # 28 = se agoto el tiempo de espera. EasyPanel recibio el aviso pero
-          # deja la conexion abierta mientras compila, asi que tarda mas de lo
-          # que aguanta curl. El despliegue SI ocurre: no es un fallo.
-          if [ "$salida" = "28" ]; then
-            echo "Aviso enviado. EasyPanel no contesto en 25 s porque se queda"
-            echo "compilando con la conexion abierta; el despliegue va en marcha."
-            echo "Mira los logs del servicio en EasyPanel para confirmarlo."
-            exit 0
-          fi
-
+          # Antes, un "no contesta" se daba por bueno suponiendo que EasyPanel estaba
+          # compilando. Eso dejo el despliegue roto horas sin que nadie se enterara
+          # (06/10/2026). Yendo por el dominio, EasyPanel contesta 200 en milisegundos:
+          # si no contesta, es un fallo y hay que decirlo.
           if [ "$salida" != "0" ]; then
-            echo "El webhook fallo de verdad (codigo de curl $salida)."
+            echo "::error::El aviso NO llego a EasyPanel (curl $salida). NADA se desplego."
+            echo "Comproba que https://admin.roxsolutionscr.com responde y que el secreto"
+            echo "EASYPANEL_WEBHOOK sigue siendo valido."
             cat respuesta.txt 2>/dev/null || true
             exit 1
           fi
